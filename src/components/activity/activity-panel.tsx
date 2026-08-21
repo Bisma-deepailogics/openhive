@@ -5,6 +5,7 @@ import { useAppStore } from '@/lib/store/app-store'
 import type { ActivityItem } from '@/lib/store/app-store'
 import { X, Bell, AtSign, MessageSquare, Heart, CheckCheck, ChevronDown } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
+import Image from 'next/image'
 
 const PAGE_SIZE = 20
 
@@ -51,9 +52,11 @@ function ActivityItemRow({ item, onNavigate }: { item: ActivityItem; onNavigate:
       <div className="flex items-start gap-3">
         {/* Avatar */}
         {item.message.sender?.avatar_url ? (
-          <img
+          <Image
             src={item.message.sender.avatar_url}
             alt={senderName}
+            width={36}
+            height={36}
             className="h-9 w-9 rounded-xl object-cover shrink-0"
           />
         ) : (

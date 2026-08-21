@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
+import Image from 'next/image'
 import { getSupabaseClient } from '@/lib/supabase/client'
 import { useAppStore } from '@/lib/store/app-store'
 import { MessageBubble } from './message-bubble'
@@ -299,7 +300,7 @@ export function ChannelView({ channel, isPreview = false }: ChannelViewProps) {
     return () => {
       callSub.unsubscribe()
     }
-  }, [channel.id, workspace])
+  }, [channel.id, setChannelActiveCall, workspace])
 
   async function handleStartOrJoinCall() {
     const client = getSupabaseClient()
@@ -433,14 +434,28 @@ export function ChannelView({ channel, isPreview = false }: ChannelViewProps) {
               <>
                 <div className="relative h-7 w-7 shrink-0">
                   {dmInfo?.memberProfiles?.[0]?.avatar_url ? (
-                    <img src={dmInfo.memberProfiles[0].avatar_url} alt="" className="absolute top-0 left-0 h-[18px] w-[18px] rounded-md object-cover border-2 border-white" />
+                    <Image
+                      src={dmInfo.memberProfiles[0].avatar_url}
+                      alt=""
+                      width={18}
+                      height={18}
+                      unoptimized
+                      className="absolute top-0 left-0 h-[18px] w-[18px] rounded-md object-cover border-2 border-white"
+                    />
                   ) : (
                     <div className="absolute top-0 left-0 h-[18px] w-[18px] rounded-md flex items-center justify-center text-[8px] font-bold text-white border-2 border-white" style={{ background: '#7C5CFC' }}>
                       {dmInfo?.memberProfiles?.[0]?.display_name?.[0]?.toUpperCase() || '?'}
                     </div>
                   )}
                   {dmInfo?.memberProfiles?.[1]?.avatar_url ? (
-                    <img src={dmInfo.memberProfiles[1].avatar_url} alt="" className="absolute bottom-0 right-0 h-[18px] w-[18px] rounded-md object-cover border-2 border-white" />
+                    <Image
+                      src={dmInfo.memberProfiles[1].avatar_url}
+                      alt=""
+                      width={18}
+                      height={18}
+                      unoptimized
+                      className="absolute bottom-0 right-0 h-[18px] w-[18px] rounded-md object-cover border-2 border-white"
+                    />
                   ) : (
                     <div className="absolute bottom-0 right-0 h-[18px] w-[18px] rounded-md flex items-center justify-center text-[8px] font-bold text-white border-2 border-white" style={{ background: '#9B7DFF' }}>
                       {dmInfo?.memberProfiles?.[1]?.display_name?.[0]?.toUpperCase() || '+'}

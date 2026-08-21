@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Profile, Workspace, Channel, Message, Reaction, WorkspaceMember, ActiveCall } from '@/types/database'
+import type { Profile, Workspace, Channel, Message, Reaction, ActiveCall } from '@/types/database'
 
 export interface ActivityItem {
   id: string

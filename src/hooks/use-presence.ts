@@ -1,18 +1,13 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { getSupabaseClient } from '@/lib/supabase/client'
 import { useAppStore } from '@/lib/store/app-store'
 
-const HEARTBEAT_INTERVAL = 60_000 // Update last_seen every 60s
+const HEARTBEAT_INTERVAL = 15_000 // 15 seconds
 
-/**
- * Tracks user presence: sets is_online=true on mount,
- * updates last_seen_at periodically, and sets is_online=false on unmount/tab close.
- */
 export function usePresence() {
   const { user } = useAppStore()
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     if (!user) return
@@ -20,87 +15,141 @@ export function usePresence() {
     const client = getSupabaseClient()
     if (!client) return
 
-    // Set online + update last_seen
-    async function setOnline() {
-      await client!
-        .from('profiles')
-        .update({ is_online: true, last_seen_at: new Date().toISOString() })
-        .eq('id', user!.id)
-    }
+    let isCleaningUp = false
 
-    // Set offline + update last_seen
-    async function setOffline() {
-      // Use sendBeacon-compatible approach for tab close
-      const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/profiles?id=eq.${user!.id}`
-      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-      if (!anonKey) return
+    // -----------------------------------------
+    // Set user ONLINE
+    // -----------------------------------------
+    const setOnline = async () => {
+      if (isCleaningUp) return
 
-      // Try fetch first (works for normal navigation/cleanup)
       try {
-        await client!
+        await client
           .from('profiles')
-          .update({ is_online: false, last_seen_at: new Date().toISOString() })
-          .eq('id', user!.id)
-      } catch {
-        // Fallback: sendBeacon for tab close (best-effort)
-        try {
-          const body = JSON.stringify({ is_online: false, last_seen_at: new Date().toISOString() })
-          navigator.sendBeacon?.(url, new Blob([body], { type: 'application/json' }))
-        } catch {
-          // Best effort
-        }
+          .update({
+            is_online: true,
+            last_seen_at: new Date().toISOString(),
+          })
+          .eq('id', user.id)
+      } catch (error) {
+        console.error('Failed to set user online:', error)
       }
     }
 
-    // Heartbeat: update last_seen periodically while tab is active
-    async function heartbeat() {
-      if (document.visibilityState === 'visible') {
-        await client!
+    // -----------------------------------------
+    // Set user OFFLINE
+    // -----------------------------------------
+    const setOffline = async () => {
+      try {
+        await client
           .from('profiles')
-          .update({ is_online: true, last_seen_at: new Date().toISOString() })
-          .eq('id', user!.id)
+          .update({
+            is_online: false,
+            last_seen_at: new Date().toISOString(),
+          })
+          .eq('id', user.id)
+      } catch (error) {
+        console.error('Failed to set user offline:', error)
       }
     }
 
-    // Handle visibility change (tab focus/blur)
-    function handleVisibilityChange() {
+    // -----------------------------------------
+    // HEARTBEAT
+    // User is actively using the app
+    // -----------------------------------------
+    const heartbeat = async () => {
+      if (isCleaningUp) return
+
+      // If tab is not visible, don't keep user online
+      if (document.visibilityState !== 'visible') return
+
+      try {
+        await client
+          .from('profiles')
+          .update({
+            is_online: true,
+            last_seen_at: new Date().toISOString(),
+          })
+          .eq('id', user.id)
+      } catch (error) {
+        console.error('Presence heartbeat failed:', error)
+      }
+    }
+
+    // -----------------------------------------
+    // TAB VISIBILITY
+    // -----------------------------------------
+    const handleVisibilityChange = async () => {
       if (document.visibilityState === 'visible') {
-        setOnline()
+        // User came back to the app
+        await setOnline()
       } else {
-        // Tab hidden — update last_seen but keep online (they might come back)
-        client!
-          .from('profiles')
-          .update({ last_seen_at: new Date().toISOString() })
-          .eq('id', user!.id)
+        // User switched/minimized the tab
+        await setOffline()
       }
     }
 
-    // Handle tab close / navigate away
-    function handleBeforeUnload() {
-      setOffline()
+    // -----------------------------------------
+    // Browser close / refresh / navigation
+    // -----------------------------------------
+    const handlePageHide = () => {
+      // Best effort.
+      // Browser can terminate async requests during page unload.
+      client
+        .from('profiles')
+        .update({
+          is_online: false,
+          last_seen_at: new Date().toISOString(),
+        })
+        .eq('id', user.id)
     }
 
-    // Initial: set online
+    // -----------------------------------------
+    // Initial state
+    // -----------------------------------------
     setOnline()
 
+    // -----------------------------------------
     // Start heartbeat
-    intervalRef.current = setInterval(heartbeat, HEARTBEAT_INTERVAL)
+    // -----------------------------------------
+    const interval = setInterval(
+      heartbeat,
+      HEARTBEAT_INTERVAL
+    )
 
-    // Listen for visibility + unload events
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    window.addEventListener('beforeunload', handleBeforeUnload)
+    // -----------------------------------------
+    // Event listeners
+    // -----------------------------------------
+    document.addEventListener(
+      'visibilitychange',
+      handleVisibilityChange
+    )
 
+    window.addEventListener(
+      'pagehide',
+      handlePageHide
+    )
+
+    // -----------------------------------------
+    // Cleanup
+    // -----------------------------------------
     return () => {
-      // Cleanup: set offline
+      isCleaningUp = true
+
+      clearInterval(interval)
+
+      document.removeEventListener(
+        'visibilitychange',
+        handleVisibilityChange
+      )
+
+      window.removeEventListener(
+        'pagehide',
+        handlePageHide
+      )
+
+      // Normal React cleanup
       setOffline()
-
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-        intervalRef.current = null
-      }
-
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-      window.removeEventListener('beforeunload', handleBeforeUnload)
     }
   }, [user])
 }

@@ -109,24 +109,54 @@ function CallContent({ channelName }: { channelName: string }) {
     updateParticipantState()
   }, [updateParticipantState])
 
-  async function toggleMute() {
-    try {
-      await localParticipant.setMicrophoneEnabled(isMuted)
-      setIsMuted(!isMuted)
-    } catch (err) {
-      console.error('Failed to toggle mute:', err)
-    }
-  }
+ async function toggleMute() {
+  try {
+    const enabled = !isMuted
 
-  async function toggleCamera() {
-    try {
-      await localParticipant.setCameraEnabled(!isCameraOn)
-      setIsCameraOn(!isCameraOn)
-    } catch (err) {
-      console.error('Failed to toggle camera:', err)
-    }
-  }
+    await localParticipant.setMicrophoneEnabled(enabled)
 
+    setIsMuted(!enabled)
+  } catch (err) {
+    console.error('Failed to toggle mute:', err)
+  }
+}
+
+ async function toggleCamera() {
+  try {
+    console.log('Camera state before:', isCameraOn)
+
+    if (!isCameraOn) {
+      const devices = await navigator.mediaDevices.enumerateDevices()
+
+      const cameras = devices.filter(
+        (device) => device.kind === 'videoinput'
+      )
+
+      console.log('Available cameras:', cameras)
+
+      if (cameras.length === 0) {
+        console.error('❌ No camera detected')
+        return
+      }
+
+      console.log('Starting camera...')
+
+      await localParticipant.setCameraEnabled(true)
+
+      console.log('✅ Camera started')
+
+      setIsCameraOn(true)
+    } else {
+      await localParticipant.setCameraEnabled(false)
+
+      console.log('✅ Camera stopped')
+
+      setIsCameraOn(false)
+    }
+  } catch (err) {
+    console.error('❌ Could not start video source:', err)
+  }
+}
   async function toggleScreenShare() {
     try {
       await localParticipant.setScreenShareEnabled(!isScreenSharing)
@@ -136,35 +166,85 @@ function CallContent({ channelName }: { channelName: string }) {
     }
   }
 
-  async function handleLeave() {
-    const client = getSupabaseClient()
-    if (client && user && activeCall) {
-      // Mark participant as left
-      await client
-        .from('call_participants')
-        .update({ left_at: new Date().toISOString() })
-        .eq('call_id', activeCall.id)
-        .eq('profile_id', user.id)
+ async function handleLeave() {
+  const client = getSupabaseClient()
+  const currentCall = activeCall
+  const currentUser = user
 
-      // If last participant, end the call
-      const { data: remaining } = await client
-        .from('call_participants')
-        .select('profile_id')
-        .eq('call_id', activeCall.id)
-        .is('left_at', null)
-
-      if (!remaining || remaining.length <= 1) {
-        await client
-          .from('active_calls')
-          .update({ ended_at: new Date().toISOString() })
-          .eq('id', activeCall.id)
-      }
-    }
-
+  if (!currentCall || !currentUser) {
     room.disconnect()
     leaveCall()
+    return
   }
 
+  try {
+    // 1. First mark THIS participant as left
+    if (client) {
+      const { error: participantError } = await client
+        .from('call_participants')
+        .update({
+          left_at: new Date().toISOString(),
+          is_muted: true,
+          is_camera_on: false,
+          is_sharing_screen: false,
+        })
+        .eq('call_id', currentCall.id)
+        .eq('profile_id', currentUser.id)
+
+      if (participantError) {
+        console.error(
+          '❌ Failed to mark participant as left:',
+          participantError
+        )
+      } else {
+        console.log('✅ Participant marked as left')
+      }
+
+      // 2. Get participants who have NOT left
+      const { data: remaining, error: remainingError } = await client
+        .from('call_participants')
+        .select('profile_id, left_at')
+        .eq('call_id', currentCall.id)
+        .is('left_at', null)
+
+      if (remainingError) {
+        console.error(
+          '❌ Failed to check remaining participants:',
+          remainingError
+        )
+      } else {
+        console.log('👥 Remaining participants:', remaining)
+
+        // 3. If nobody remains, end the call
+        if (remaining.length === 0) {
+          const { error: endCallError } = await client
+            .from('active_calls')
+            .update({
+              ended_at: new Date().toISOString(),
+            })
+            .eq('id', currentCall.id)
+
+          if (endCallError) {
+            console.error(
+              '❌ Failed to end active call:',
+              endCallError
+            )
+          } else {
+            console.log('✅ Active call ended:', currentCall.id)
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('❌ Call cleanup failed:', error)
+  } finally {
+    // 4. Leave LiveKit
+    room.disconnect()
+
+    // 5. Close call UI
+    leaveCall()
+  }
+}
   const videoTracks = tracks.filter(
     (t): t is TrackReference => t.source === Track.Source.Camera && isTrackReference(t)
   )
