@@ -4,9 +4,18 @@ export interface Profile {
   id: string
   email: string | null
   display_name: string
+  full_name_pronunciation?: string | null
+  pronouns?: string | null
   avatar_url: string | null
   status_emoji: string | null
   status_text: string | null
+  about_me?: string | null
+  contact_info?: string | null
+  contact_visibility?: 'workspace' | 'private' | null
+  timezone?: string | null
+  start_date?: string | null
+  notifications_enabled?: boolean
+  notifications_snooze_until?: string | null
   is_online: boolean
   last_seen_at: string | null
   created_at: string

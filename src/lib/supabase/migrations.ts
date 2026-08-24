@@ -295,6 +295,18 @@ export const migrations: string[] = [
     UNIQUE(user_id, message_id)
   );`,
 
+  // 040 - Profile Enhancements (Slack-like profile fields + notification snooze)
+  `ALTER TABLE profiles
+    ADD COLUMN IF NOT EXISTS full_name_pronunciation text,
+    ADD COLUMN IF NOT EXISTS pronouns text,
+    ADD COLUMN IF NOT EXISTS about_me text,
+    ADD COLUMN IF NOT EXISTS contact_info text,
+    ADD COLUMN IF NOT EXISTS contact_visibility text DEFAULT 'workspace',
+    ADD COLUMN IF NOT EXISTS timezone text,
+    ADD COLUMN IF NOT EXISTS start_date date,
+    ADD COLUMN IF NOT EXISTS notifications_enabled boolean DEFAULT true,
+    ADD COLUMN IF NOT EXISTS notifications_snooze_until timestamptz;`,
+
   // RLS Policies + Triggers
   `-- Nuclear cleanup: drop ALL existing policies
   DO $cleanup$

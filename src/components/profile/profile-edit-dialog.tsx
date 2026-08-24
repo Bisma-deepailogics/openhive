@@ -24,8 +24,17 @@ interface ProfileEditDialogProps {
 export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps) {
   const { user, setUser } = useAppStore()
   const [displayName, setDisplayName] = useState('')
+  const [fullNamePronunciation, setFullNamePronunciation] = useState('')
+  const [pronouns, setPronouns] = useState('')
   const [statusEmoji, setStatusEmoji] = useState('')
   const [statusText, setStatusText] = useState('')
+  const [aboutMe, setAboutMe] = useState('')
+  const [contactInfo, setContactInfo] = useState('')
+  const [contactVisibility, setContactVisibility] = useState<'workspace' | 'private'>('workspace')
+  const [timezone, setTimezone] = useState('')
+  const [startDate, setStartDate] = useState('')
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true)
+  const [notificationsSnoozeUntil, setNotificationsSnoozeUntil] = useState('')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -37,8 +46,21 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
   useEffect(() => {
     if (open && user) {
       setDisplayName(user.display_name || '')
+      setFullNamePronunciation(user.full_name_pronunciation || '')
+      setPronouns(user.pronouns || '')
       setStatusEmoji(user.status_emoji || '')
       setStatusText(user.status_text || '')
+      setAboutMe(user.about_me || '')
+      setContactInfo(user.contact_info || '')
+      setContactVisibility(user.contact_visibility === 'private' ? 'private' : 'workspace')
+      setTimezone(user.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || '')
+      setStartDate(user.start_date || '')
+      setNotificationsEnabled(user.notifications_enabled ?? true)
+      setNotificationsSnoozeUntil(
+        user.notifications_snooze_until
+          ? user.notifications_snooze_until.slice(0, 16)
+          : ''
+      )
       setAvatarUrl(user.avatar_url)
       setAvatarPreview(user.avatar_url)
       setError('')
@@ -172,13 +194,47 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
         .from('profiles')
         .update({
           display_name: displayName.trim(),
+          full_name_pronunciation:
+            fullNamePronunciation.trim() || null,
+          pronouns: pronouns.trim() || null,
           status_emoji: statusEmoji || null,
           status_text: statusText.trim() || null,
+          about_me: aboutMe.trim() || null,
+          contact_info: contactInfo.trim() || null,
+          contact_visibility: contactVisibility,
+          timezone: timezone.trim() || null,
+          start_date: startDate || null,
+          notifications_enabled: notificationsEnabled,
+          notifications_snooze_until:
+            notificationsSnoozeUntil
+              ? new Date(notificationsSnoozeUntil).toISOString()
+              : null,
           avatar_url: avatarUrl,
         })
         .eq('id', user.id)
 
-      if (updateError) throw updateError
+      if (updateError) {
+        const message = updateError.message || ''
+
+        if (
+          message.includes('column') &&
+          message.includes('does not exist')
+        ) {
+          const { error: fallbackError } = await client
+            .from('profiles')
+            .update({
+              display_name: displayName.trim(),
+              status_emoji: statusEmoji || null,
+              status_text: statusText.trim() || null,
+              avatar_url: avatarUrl,
+            })
+            .eq('id', user.id)
+
+          if (fallbackError) throw fallbackError
+        } else {
+          throw updateError
+        }
+      }
 
       // Update auth metadata
       await client.auth.updateUser({
@@ -189,8 +245,21 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
       setUser({
         ...user,
         display_name: displayName.trim(),
+        full_name_pronunciation:
+          fullNamePronunciation.trim() || null,
+        pronouns: pronouns.trim() || null,
         status_emoji: statusEmoji || null,
         status_text: statusText.trim() || null,
+        about_me: aboutMe.trim() || null,
+        contact_info: contactInfo.trim() || null,
+        contact_visibility: contactVisibility,
+        timezone: timezone.trim() || null,
+        start_date: startDate || null,
+        notifications_enabled: notificationsEnabled,
+        notifications_snooze_until:
+          notificationsSnoozeUntil
+            ? new Date(notificationsSnoozeUntil).toISOString()
+            : null,
         avatar_url: avatarUrl,
       })
 
@@ -207,6 +276,14 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
 
   // Common status emojis
   const statusEmojis = ['😊', '🏠', '🎯', '🚀', '💤', '🏖️', '🤒', '📅', '🎉', '🔇']
+
+  const setSnoozeMinutes = (minutes: number) => {
+    const date = new Date(Date.now() + minutes * 60 * 1000)
+    const local = new Date(
+      date.getTime() - date.getTimezoneOffset() * 60 * 1000
+    )
+    setNotificationsSnoozeUntil(local.toISOString().slice(0, 16))
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -289,6 +366,34 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
             />
           </div>
 
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="pronunciation">Name pronunciation</Label>
+              <Input
+                id="pronunciation"
+                value={fullNamePronunciation}
+                onChange={(e) =>
+                  setFullNamePronunciation(e.target.value)
+                }
+                placeholder="e.g. ah-lee"
+                maxLength={80}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="pronouns">Pronouns</Label>
+              <Input
+                id="pronouns"
+                value={pronouns}
+                onChange={(e) =>
+                  setPronouns(e.target.value)
+                }
+                placeholder="e.g. she/her"
+                maxLength={40}
+              />
+            </div>
+          </div>
+
           {/* Status */}
           <div className="space-y-1.5">
             <Label>Status</Label>
@@ -324,6 +429,139 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="about-me">About me</Label>
+            <Input
+              id="about-me"
+              value={aboutMe}
+              onChange={(e) =>
+                setAboutMe(e.target.value)
+              }
+              placeholder="What are you working on?"
+              maxLength={180}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="timezone">Timezone</Label>
+              <Input
+                id="timezone"
+                value={timezone}
+                onChange={(e) =>
+                  setTimezone(e.target.value)
+                }
+                placeholder="Asia/Karachi"
+                maxLength={80}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="start-date">Start date</Label>
+              <Input
+                id="start-date"
+                type="date"
+                value={startDate}
+                onChange={(e) =>
+                  setStartDate(e.target.value)
+                }
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="contact-info">Contact information</Label>
+            <Input
+              id="contact-info"
+              value={contactInfo}
+              onChange={(e) =>
+                setContactInfo(e.target.value)
+              }
+              placeholder="Phone, alternate email, etc."
+              maxLength={120}
+            />
+
+            <select
+              value={contactVisibility}
+              onChange={(e) =>
+                setContactVisibility(
+                  e.target.value === 'private'
+                    ? 'private'
+                    : 'workspace'
+                )
+              }
+              className="h-9 rounded-md border px-3 text-sm"
+              style={{ borderColor: '#E5E1EE' }}
+            >
+              <option value="workspace">
+                Visible to workspace
+              </option>
+              <option value="private">
+                Only me
+              </option>
+            </select>
+          </div>
+
+          <div className="space-y-2 rounded-xl border p-3" style={{ borderColor: '#E5E1EE', background: '#FAF9FF' }}>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <Label className="text-sm">Notifications</Label>
+                <p className="text-xs" style={{ color: '#8E8EA0' }}>
+                  Control browser notifications and snooze time
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setNotificationsEnabled((value) => !value)
+                }
+                className="px-2.5 py-1 rounded-lg text-xs font-medium"
+                style={{
+                  background: notificationsEnabled ? '#DCFCE7' : '#F3F4F6',
+                  color: notificationsEnabled ? '#166534' : '#6B7280',
+                }}
+              >
+                {notificationsEnabled ? 'On' : 'Off'}
+              </button>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setSnoozeMinutes(30)}
+                className="px-2.5 py-1 rounded-lg text-xs font-medium"
+                style={{ background: '#EDE5FF', color: '#7C5CFC' }}
+              >
+                Snooze 30 min
+              </button>
+              <button
+                type="button"
+                onClick={() => setSnoozeMinutes(90)}
+                className="px-2.5 py-1 rounded-lg text-xs font-medium"
+                style={{ background: '#EDE5FF', color: '#7C5CFC' }}
+              >
+                Snooze 90 min
+              </button>
+              <button
+                type="button"
+                onClick={() => setNotificationsSnoozeUntil('')}
+                className="px-2.5 py-1 rounded-lg text-xs font-medium"
+                style={{ background: '#F3F4F6', color: '#6B7280' }}
+              >
+                Clear snooze
+              </button>
+            </div>
+
+            <Input
+              type="datetime-local"
+              value={notificationsSnoozeUntil}
+              onChange={(e) =>
+                setNotificationsSnoozeUntil(e.target.value)
+              }
+            />
           </div>
 
           {error && (

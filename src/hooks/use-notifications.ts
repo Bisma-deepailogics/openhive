@@ -9,6 +9,24 @@ export function useNotifications() {
   const { user, workspace, currentChannelId } = useAppStore()
   const permissionRef = useRef<NotificationPermission>('default')
 
+  function notificationsPaused(): boolean {
+    const currentUser = useAppStore.getState().user
+    if (!currentUser) return true
+
+    if (currentUser.notifications_enabled === false) {
+      return true
+    }
+
+    if (
+      currentUser.notifications_snooze_until &&
+      new Date(currentUser.notifications_snooze_until) > new Date()
+    ) {
+      return true
+    }
+
+    return false
+  }
+
   // Request notification permission
   useEffect(() => {
     if (typeof window === 'undefined' || !('Notification' in window)) return
@@ -69,6 +87,8 @@ export function useNotifications() {
           }
 
           const state = useAppStore.getState()
+
+          if (notificationsPaused()) return
 
           // Skip activity + browser notifications for muted channels
           if (state.mutedChannelIds.includes(msg.channel_id)) return

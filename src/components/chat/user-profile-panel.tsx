@@ -1,7 +1,19 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { X, Mail, Clock, Circle, MessageSquare, Pencil } from 'lucide-react'
+import {
+  X,
+  Mail,
+  Clock,
+  Circle,
+  MessageSquare,
+  Pencil,
+  User,
+  Globe,
+  Bell,
+  Calendar,
+  Info,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getSupabaseClient } from '@/lib/supabase/client'
 import { useAppStore } from '@/lib/store/app-store'
@@ -59,6 +71,9 @@ export function UserProfilePanel() {
   const displayName = profile?.display_name || 'Loading...'
   const initial = displayName[0]?.toUpperCase() || '?'
   const isOnline = profile?.is_online ?? false
+  const notificationsSnoozed =
+    !!profile?.notifications_snooze_until &&
+    new Date(profile.notifications_snooze_until) > new Date()
 
   return (
     <>
@@ -111,6 +126,12 @@ export function UserProfilePanel() {
                 </div>
               )}
 
+              {profile.pronouns && (
+                <div className="mt-1 text-xs" style={{ color: '#8E8EA0' }}>
+                  {profile.pronouns}
+                </div>
+              )}
+
               {role && (
                 <span
                   className="mt-2.5 text-xs px-3 py-1 rounded-full font-medium"
@@ -154,6 +175,101 @@ export function UserProfilePanel() {
                     >
                       {profile.email}
                     </a>
+                  </div>
+                </div>
+              )}
+
+              {profile.full_name_pronunciation && (
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#8E8EA0' }}>
+                    Name pronunciation
+                  </label>
+                  <div className="flex items-center gap-2 text-sm">
+                    <User className="h-4 w-4 shrink-0" style={{ color: '#8E8EA0' }} />
+                    <span style={{ color: '#2D2B3D' }}>
+                      {profile.full_name_pronunciation}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {profile.timezone && (
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#8E8EA0' }}>
+                    Timezone
+                  </label>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Globe className="h-4 w-4 shrink-0" style={{ color: '#8E8EA0' }} />
+                    <span style={{ color: '#2D2B3D' }}>
+                      {profile.timezone}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {profile.start_date && (
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#8E8EA0' }}>
+                    Start Date
+                  </label>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Calendar className="h-4 w-4 shrink-0" style={{ color: '#8E8EA0' }} />
+                    <span style={{ color: '#2D2B3D' }}>
+                      {new Date(profile.start_date).toLocaleDateString('en-US', {
+                        month: 'long',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {profile.about_me && (
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#8E8EA0' }}>
+                    About Me
+                  </label>
+                  <div className="flex items-start gap-2 text-sm">
+                    <Info className="h-4 w-4 mt-0.5 shrink-0" style={{ color: '#8E8EA0' }} />
+                    <span style={{ color: '#2D2B3D' }}>
+                      {profile.about_me}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {(profile.contact_visibility !== 'private' || isOwnProfile) && profile.contact_info && (
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#8E8EA0' }}>
+                    Contact Information
+                  </label>
+                  <div className="flex items-start gap-2 text-sm">
+                    <Mail className="h-4 w-4 mt-0.5 shrink-0" style={{ color: '#8E8EA0' }} />
+                    <span style={{ color: '#2D2B3D' }}>
+                      {profile.contact_info}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {isOwnProfile && (
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#8E8EA0' }}>
+                    Notifications
+                  </label>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Bell className="h-4 w-4 shrink-0" style={{ color: '#8E8EA0' }} />
+                    <span style={{ color: '#2D2B3D' }}>
+                      {profile.notifications_enabled === false
+                        ? 'Off'
+                        : notificationsSnoozed
+                        ? `Snoozed until ${new Date(profile.notifications_snooze_until as string).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}`
+                        : 'On'}
+                    </span>
                   </div>
                 </div>
               )}
