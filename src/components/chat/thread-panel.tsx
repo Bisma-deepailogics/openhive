@@ -47,6 +47,16 @@ export function ThreadPanel() {
 
     loadReplies()
 
+    async function fetchReply(messageId: string) {
+      const { data } = await client
+        .from('messages')
+        .select('*, sender:profiles(*)')
+        .eq('id', messageId)
+        .single()
+
+      return data as Message | null
+    }
+
     const sub = client
       .channel(`thread:${threadParentMessage.id}`)
       .on(
@@ -58,16 +68,54 @@ export function ThreadPanel() {
           filter: `parent_id=eq.${threadParentMessage.id}`,
         },
         async (payload) => {
-          const { data } = await client
-            .from('messages')
-            .select('*, sender:profiles(*)')
-            .eq('id', payload.new.id)
-            .single()
+          const data = await fetchReply(payload.new.id)
 
           if (data && !repliesRef.current.find((m) => m.id === data.id)) {
             setReplies((prev) => [...prev, data as Message])
             scrollToBottom()
           }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages',
+          filter: `parent_id=eq.${threadParentMessage.id}`,
+        },
+        async (payload) => {
+          if (payload.new.is_deleted) {
+            setReplies((prev) =>
+              prev.filter((message) => message.id !== payload.new.id)
+            )
+
+            return
+          }
+
+          const updated = await fetchReply(payload.new.id)
+
+          if (updated) {
+            setReplies((prev) =>
+              prev.map((message) =>
+                message.id === updated.id ? updated : message
+              )
+            )
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'messages',
+          filter: `parent_id=eq.${threadParentMessage.id}`,
+        },
+        async (payload) => {
+          setReplies((prev) =>
+            prev.filter((message) => message.id !== payload.old.id)
+          )
         }
       )
       .subscribe()
