@@ -227,11 +227,14 @@ export function MessageInput({
     setSending(true)
 
     try {
-      const attachmentUrls = attachments.map(
-        (attachment) => attachment.url
+      const attachmentPayloads = attachments.map(
+        (attachment) =>
+          `${encodeURIComponent(
+            attachment.name
+          )}|${attachment.url}`
       )
 
-      await onSend(content, attachmentUrls)
+      await onSend(content, attachmentPayloads)
 
       editor.commands.clearContent()
       setAttachments([])

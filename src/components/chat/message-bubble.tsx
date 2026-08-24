@@ -1,8 +1,19 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { formatDistanceToNow } from 'date-fns'
-import { MessageSquare, Smile, MoreHorizontal, Pencil, Trash2, Bookmark } from 'lucide-react'
+import {
+  MessageSquare,
+  Smile,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+  Bookmark,
+  ImageIcon,
+  FileText,
+  File,
+  ExternalLink,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getSupabaseClient } from '@/lib/supabase/client'
 import DOMPurify from 'dompurify'
@@ -12,6 +23,45 @@ import type { Message, Reaction } from '@/types/database'
 
 // Global cache for resolved mention display names (userId -> displayName)
 const mentionNameCache: Record<string, string> = {}
+
+interface ParsedAttachment {
+  label: string
+  url: string
+}
+
+function parseMessageAttachments(content: string): {
+  textContent: string
+  attachments: ParsedAttachment[]
+} {
+  const attachmentRegex =
+    /^\s*📎\s*\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)\s*$/gm
+
+  const attachments: ParsedAttachment[] = []
+
+  const textContent = content
+    .replace(attachmentRegex, (_match, label, url) => {
+      attachments.push({ label, url })
+      return ''
+    })
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+
+  return { textContent, attachments }
+}
+
+function getAttachmentKind(url: string): 'image' | 'pdf' | 'file' {
+  const normalized = url.toLowerCase().split('?')[0]
+
+  if (/\.(png|jpe?g|gif|webp|svg)$/.test(normalized)) {
+    return 'image'
+  }
+
+  if (/\.pdf$/.test(normalized)) {
+    return 'pdf'
+  }
+
+  return 'file'
+}
 
 // Render message content with markdown-like formatting
 function renderMessageContent(text: string, mentionNames?: Record<string, string>): string {
@@ -71,6 +121,10 @@ export function MessageBubble({ message, showHeader, isOwn, isThread }: MessageB
   const initial = displayName[0]?.toUpperCase() || '?'
   const time = formatDistanceToNow(new Date(message.created_at), { addSuffix: true })
   const messageReactions = reactions[message.id] || []
+  const parsedMessage = useMemo(
+    () => parseMessageAttachments(message.content),
+    [message.content]
+  )
 
   // Resolve @mention UUIDs to display names
   useEffect(() => {
@@ -355,11 +409,75 @@ export function MessageBubble({ message, showHeader, isOwn, isThread }: MessageB
               </div>
             </div>
           ) : (
-            <div
-              className="text-[15px] leading-[1.5] whitespace-pre-wrap break-words message-content"
-              style={{ color: '#2D2B3D' }}
-              dangerouslySetInnerHTML={{ __html: renderMessageContent(message.content, mentionNames) }}
-            />
+            <>
+              {parsedMessage.textContent && (
+                <div
+                  className="text-[15px] leading-[1.5] whitespace-pre-wrap break-words message-content"
+                  style={{ color: '#2D2B3D' }}
+                  dangerouslySetInnerHTML={{ __html: renderMessageContent(parsedMessage.textContent, mentionNames) }}
+                />
+              )}
+
+              {parsedMessage.attachments.length > 0 && (
+                <div className="mt-2 space-y-2">
+                  {parsedMessage.attachments.map((attachment, index) => {
+                    const kind = getAttachmentKind(attachment.url)
+
+                    if (kind === 'image') {
+                      return (
+                        <a
+                          key={`${attachment.url}-${index}`}
+                          href={attachment.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block rounded-xl overflow-hidden border hover:opacity-95 transition-opacity"
+                          style={{ borderColor: '#E5E1EE' }}
+                        >
+                          <img
+                            src={attachment.url}
+                            alt={attachment.label}
+                            className="w-full max-w-[320px] max-h-[280px] object-cover"
+                          />
+                        </a>
+                      )
+                    }
+
+                    return (
+                      <a
+                        key={`${attachment.url}-${index}`}
+                        href={attachment.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2.5 rounded-xl border px-3 py-2 hover:bg-[#F9F7FF] transition-colors max-w-[360px]"
+                        style={{ borderColor: '#E5E1EE' }}
+                      >
+                        <div
+                          className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0"
+                          style={{ background: '#F5F2FF' }}
+                        >
+                          {kind === 'pdf' ? (
+                            <FileText className="h-4 w-4" style={{ color: '#7C5CFC' }} />
+                          ) : (
+                            <File className="h-4 w-4" style={{ color: '#7C5CFC' }} />
+                          )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate" style={{ color: '#2D2B3D' }}>
+                            {attachment.label}
+                          </p>
+                          <p className="text-xs" style={{ color: '#8E8EA0' }}>
+                            {kind === 'pdf' ? 'PDF preview' : 'File attachment'}
+                          </p>
+                        </div>
+
+                        <ExternalLink className="h-3.5 w-3.5 shrink-0" style={{ color: '#8E8EA0' }} />
+                      </a>
+                    )
+                  })}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

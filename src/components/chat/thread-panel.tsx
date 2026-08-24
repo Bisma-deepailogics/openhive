@@ -87,10 +87,25 @@ export function ThreadPanel() {
       return content
     }
 
-    const attachmentLines = attachments.map((url) => {
-      const fileName = decodeURIComponent(
+    const attachmentLines = attachments.map((attachment) => {
+      const splitIndex = attachment.indexOf('|')
+
+      const hasEmbeddedName = splitIndex > 0
+      const rawName = hasEmbeddedName
+        ? attachment.slice(0, splitIndex)
+        : ''
+
+      const url = hasEmbeddedName
+        ? attachment.slice(splitIndex + 1)
+        : attachment
+
+      const fallbackName = decodeURIComponent(
         url.split('?')[0].split('/').pop() || 'attachment'
       )
+
+      const fileName = rawName
+        ? decodeURIComponent(rawName)
+        : fallbackName
 
       return `📎 [${fileName}](${url})`
     })
