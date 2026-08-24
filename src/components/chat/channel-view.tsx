@@ -213,14 +213,40 @@ export function ChannelView({ channel, isPreview = false }: ChannelViewProps) {
     }
   }, [channel.id, scrollToBottom, user?.id])
 
-  async function handleSendMessage(content: string) {
+  function buildMessageContent(
+    content: string,
+    attachments?: string[]
+  ): string {
+    if (!attachments || attachments.length === 0) {
+      return content
+    }
+
+    const attachmentLines = attachments.map((url) => {
+      const fileName = decodeURIComponent(
+        url.split('?')[0].split('/').pop() || 'attachment'
+      )
+
+      return `📎 [${fileName}](${url})`
+    })
+
+    const trimmed = content.trim()
+
+    return trimmed
+      ? `${trimmed}\n\n${attachmentLines.join('\n')}`
+      : attachmentLines.join('\n')
+  }
+
+  async function handleSendMessage(
+    content: string,
+    attachments?: string[]
+  ) {
     const client = getSupabaseClient()
     if (!client || !user) return
 
     await client.from('messages').insert({
       channel_id: channel.id,
       sender_id: user.id,
-      content,
+      content: buildMessageContent(content, attachments),
     })
   }
 
