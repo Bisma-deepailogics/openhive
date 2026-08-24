@@ -49,6 +49,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
     dmChannels,
     currentChannelId,
     setCurrentChannelId,
+    setPreviewChannel,
     setDmChannels,
     toggleActivity,
     unreadActivityCount,
@@ -72,6 +73,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
   const [browseOpen, setBrowseOpen] = useState(false)
   const [workspaceSettingsOpen, setWorkspaceSettingsOpen] = useState(false)
   const [savedItemsOpen, setSavedItemsOpen] = useState(false)
+  const [memberChannelIds, setMemberChannelIds] = useState<Set<string>>(new Set())
 
   // ---------------------------------------------------------
   // Presence
@@ -101,8 +103,12 @@ export function Sidebar({ onNavigate }: SidebarProps) {
       if (!myChannels) return
 
       const channelIds = myChannels.map((c) => c.channel_id)
+      setMemberChannelIds(new Set(channelIds))
 
-      if (channelIds.length === 0) return
+      if (channelIds.length === 0) {
+        setDmChannels([])
+        return
+      }
 
       const { data: dms } = await client
         .from('channels')
@@ -284,6 +290,12 @@ export function Sidebar({ onNavigate }: SidebarProps) {
             old.profile_id === user!.id &&
             old.channel_id
           ) {
+            setMemberChannelIds((prev) => {
+              const next = new Set(prev)
+              next.delete(old.channel_id!)
+              return next
+            })
+
             const state = useAppStore.getState()
 
             const isDm = state.dmChannels.some(
@@ -297,7 +309,15 @@ export function Sidebar({ onNavigate }: SidebarProps) {
                 )
               )
             } else {
-              state.removeChannel(old.channel_id)
+              const channel = state.channels.find(
+                (c) => c.id === old.channel_id
+              )
+
+              // Keep public channels visible even after leaving;
+              // remove private channels when membership is revoked.
+              if (channel?.is_private) {
+                state.removeChannel(old.channel_id)
+              }
             }
           }
         }
@@ -318,6 +338,12 @@ export function Sidebar({ onNavigate }: SidebarProps) {
 
           // Only react when CURRENT user is added
           if (row.profile_id !== user!.id) return
+
+          setMemberChannelIds((prev) => {
+            const next = new Set(prev)
+            next.add(row.channel_id)
+            return next
+          })
 
           const state = useAppStore.getState()
 
@@ -838,9 +864,15 @@ const presenceSub = client
                     >
                       <button
                         onClick={() => {
-                          setCurrentChannelId(
-                            channel.id
-                          )
+                          const isMember = memberChannelIds.has(channel.id)
+
+                          if (!channel.is_private && !isMember) {
+                            setPreviewChannel(channel)
+                            onNavigate?.()
+                            return
+                          }
+
+                          setCurrentChannelId(channel.id)
                           onNavigate?.()
                         }}
                         className={cn(

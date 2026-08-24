@@ -111,6 +111,8 @@ export function MessageInput({
   placeholder,
 }: MessageInputProps) {
   const { workspace } = useAppStore()
+  const resolvedPlaceholder =
+    placeholder || `Message #${channelName}`
 
   const [sending, setSending] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -262,7 +264,7 @@ export function MessageInput({
       }),
 
       Placeholder.configure({
-        placeholder: placeholder || `Message #${channelName}`,
+        placeholder: resolvedPlaceholder,
       }),
 
       Mention.configure({
@@ -533,11 +535,11 @@ export function MessageInput({
           placeholder: string
         }
       ).placeholder =
-        placeholder || `Message #${channelName}`
+        resolvedPlaceholder
 
       editor.view.dispatch(editor.state.tr)
     }
-  }, [channelName, placeholder, editor])
+  }, [resolvedPlaceholder, editor])
 
   /*
    * Slash commands

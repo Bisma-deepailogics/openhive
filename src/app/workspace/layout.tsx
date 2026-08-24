@@ -114,36 +114,49 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
     const client = getSupabaseClient()
     if (!client) return
 
-    const userId = useAppStore.getState().user?.id
+    const { user: currentUser, currentChannelId } = useAppStore.getState()
+    const userId = currentUser?.id
     if (!userId) return
 
-    // Only load channels the user is a member of
-    const { data: myMemberships } = await client
-      .from('channel_members')
-      .select('channel_id')
-      .eq('profile_id', userId)
+    // Load all workspace channels and memberships, then apply visibility rules:
+    // show all public channels + only the private channels the user has joined.
+    const [{ data: workspaceChannels }, { data: myMemberships }] = await Promise.all([
+      client
+        .from('channels')
+        .select('*')
+        .eq('workspace_id', workspaceId)
+        .eq('is_archived', false)
+        .order('name'),
+      client
+        .from('channel_members')
+        .select('channel_id')
+        .eq('profile_id', userId),
+    ])
 
-    if (!myMemberships || myMemberships.length === 0) return
+    const myChannelIds = new Set(myMemberships?.map((m) => m.channel_id) || [])
 
-    const myChannelIds = myMemberships.map((m) => m.channel_id)
-
-    const { data: myChannels } = await client
-      .from('channels')
-      .select('*')
-      .eq('workspace_id', workspaceId)
-      .eq('is_archived', false)
-      .in('id', myChannelIds)
-      .order('name')
-
-    // Filter out DM and group DM channels (they're shown separately in the DM section)
-    const allChannels = ((myChannels || []) as Channel[]).filter(
+    // Filter out DM and group DM channels (they're shown separately in the DM section),
+    // and apply public/private visibility.
+    const allChannels = ((workspaceChannels || []) as Channel[]).filter(
       (c) => !c.name.startsWith('dm-') && !c.name.startsWith('gdm-')
     )
+    const visibleChannels = allChannels.filter(
+      (c) => !c.is_private || myChannelIds.has(c.id)
+    )
 
-    if (allChannels.length > 0) {
-      setChannels(allChannels)
-      // Default to #general or first channel
-      const general = allChannels.find((c: Channel) => c.name === 'general') || allChannels[0]
+    setChannels(visibleChannels)
+
+    if (visibleChannels.length === 0) {
+      setCurrentChannelId(null)
+      return
+    }
+
+    // Keep current channel if still visible, otherwise default to #general or first channel.
+    const currentIsVisible =
+      currentChannelId && visibleChannels.some((c) => c.id === currentChannelId)
+
+    if (!currentIsVisible) {
+      const general = visibleChannels.find((c: Channel) => c.name === 'general') || visibleChannels[0]
       setCurrentChannelId(general.id)
     }
   }

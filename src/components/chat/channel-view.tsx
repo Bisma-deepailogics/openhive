@@ -754,6 +754,7 @@ export function ChannelView({ channel, isPreview = false }: ChannelViewProps) {
           </div>
         ) : (
           <MessageInput
+            key={channel.id}
             channelId={channel.id}
             channelName={displayChannelName}
             onSend={handleSendMessage}
