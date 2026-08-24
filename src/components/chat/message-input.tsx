@@ -600,6 +600,12 @@ export function MessageInput({
     async (files: FileList | File[]) => {
       console.log('UPLOAD STARTED', files)
 
+      const filesToUpload = Array.from(files)
+
+      if (filesToUpload.length === 0) {
+        return
+      }
+
       if (uploading) {
         return
       }
@@ -632,7 +638,7 @@ export function MessageInput({
 
         const uploaded: Attachment[] = []
 
-        for (const file of Array.from(files)) {
+        for (const file of filesToUpload) {
           try {
             console.log(
               'Uploading file:',
@@ -1086,11 +1092,15 @@ export function MessageInput({
         multiple
         className="hidden"
         onChange={(event) => {
-          if (event.target.files) {
-            void uploadFiles(event.target.files)
-          }
+          const files = event.target.files
+            ? Array.from(event.target.files)
+            : []
 
           event.target.value = ''
+
+          if (files.length > 0) {
+            void uploadFiles(files)
+          }
         }}
       />
     </div>
