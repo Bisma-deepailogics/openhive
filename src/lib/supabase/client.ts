@@ -1,31 +1,42 @@
 import { createBrowserClient } from '@supabase/ssr'
-import { SupabaseClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 let supabaseInstance: SupabaseClient | null = null
 
-export function getSupabaseClient(): SupabaseClient | null {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+export function getSupabaseClient(): SupabaseClient {
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL
 
-  if (!url || !key) return null
+  const key =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!url || !key) {
+    throw new Error(
+      'Supabase environment variables are not configured'
+    )
+  }
 
   if (!supabaseInstance) {
-    supabaseInstance = createBrowserClient(url, key, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-      },
-      realtime: {
-        params: {
-          eventsPerSecond: 10,
+    supabaseInstance =
+      createBrowserClient(url, key, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
         },
-      },
-    })
+        realtime: {
+          params: {
+            eventsPerSecond: 10,
+          },
+        },
+      })
   }
 
   return supabaseInstance
 }
 
 export function isConfigured(): boolean {
-  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+  return !!(
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  )
 }
