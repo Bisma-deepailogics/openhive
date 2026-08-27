@@ -6,13 +6,20 @@ export async function POST(request: NextRequest) {
     const { email, workspaceId, workspaceName } = await request.json()
 
     if (!email || !workspaceId) {
-      return NextResponse.json({ error: 'Missing email or workspaceId' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Missing email or workspaceId' },
+        { status: 400 }
+      )
     }
 
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
     if (!emailRegex.test(email)) {
-      return NextResponse.json({ error: 'Invalid email format' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Invalid email format' },
+        { status: 400 }
+      )
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -28,107 +35,193 @@ export async function POST(request: NextRequest) {
 
     // SECURITY: Verify caller is authenticated and is admin/owner of the workspace
     const authHeader = request.headers.get('authorization')
+
     if (!authHeader) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+      return NextResponse.json(
+        { error: 'Not authenticated' },
+        { status: 401 }
+      )
     }
 
-    const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    })
+    const supabaseAuth = createClient(
+      supabaseUrl,
+      supabaseAnonKey,
+      {
+        global: {
+          headers: {
+            Authorization: authHeader,
+          },
+        },
+      }
+    )
 
-    const { data: { user }, error: authError } = await supabaseAuth.auth.getUser()
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseAuth.auth.getUser()
+
     if (authError || !user) {
-      return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
+      return NextResponse.json(
+        { error: 'Invalid session' },
+        { status: 401 }
+      )
     }
 
     // Create admin client with service_role key
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    })
+    const supabaseAdmin = createClient(
+      supabaseUrl,
+      serviceRoleKey,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    )
 
     // Check that caller is admin/owner of the target workspace
-    const { data: membership } = await supabaseAdmin
+    const { data: membership, error: membershipError } = await supabaseAdmin
       .from('workspace_members')
       .select('role')
       .eq('workspace_id', workspaceId)
       .eq('profile_id', user.id)
       .single()
 
-    if (!membership || !['owner', 'admin'].includes(membership.role)) {
-      return NextResponse.json({ error: 'Only admins can invite members' }, { status: 403 })
+    if (membershipError || !membership) {
+      return NextResponse.json(
+        { error: 'Only admins can invite members' },
+        { status: 403 }
+      )
+    }
+
+    if (!['owner', 'admin'].includes(membership.role)) {
+      return NextResponse.json(
+        { error: 'Only admins can invite members' },
+        { status: 403 }
+      )
     }
 
     // Check if user already exists
-    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers()
+    const { data: existingUsers, error: listUsersError } =
+      await supabaseAdmin.auth.admin.listUsers()
+
+    if (listUsersError) {
+      throw listUsersError
+    }
+
     const existingUser = existingUsers?.users.find(
       (u) => u.email?.toLowerCase() === email.toLowerCase()
     )
 
     if (existingUser) {
       // User exists — add them to workspace directly
+
       // Check if already a member
-      const { data: existing } = await supabaseAdmin
-        .from('workspace_members')
-        .select('profile_id')
-        .eq('workspace_id', workspaceId)
-        .eq('profile_id', existingUser.id)
-        .limit(1)
+      const { data: existing, error: existingMemberError } =
+        await supabaseAdmin
+          .from('workspace_members')
+          .select('profile_id')
+          .eq('workspace_id', workspaceId)
+          .eq('profile_id', existingUser.id)
+          .limit(1)
+
+      if (existingMemberError) {
+        throw existingMemberError
+      }
 
       if (existing && existing.length > 0) {
-        return NextResponse.json({ error: 'This person is already a member', alreadyMember: true }, { status: 400 })
+        return NextResponse.json(
+          {
+            error: 'This person is already a member',
+            alreadyMember: true,
+          },
+          { status: 400 }
+        )
       }
 
       // Add to workspace
-      await supabaseAdmin.from('workspace_members').insert({
-        workspace_id: workspaceId,
-        profile_id: existingUser.id,
-        role: 'member',
-      })
+      const { error: insertMemberError } = await supabaseAdmin
+        .from('workspace_members')
+        .insert({
+          workspace_id: workspaceId,
+          profile_id: existingUser.id,
+          role: 'member',
+        })
+
+      if (insertMemberError) {
+        throw insertMemberError
+      }
 
       // Add to all public channels
-      const { data: channels } = await supabaseAdmin
+      const { data: channels, error: channelsError } = await supabaseAdmin
         .from('channels')
         .select('id')
         .eq('workspace_id', workspaceId)
         .eq('is_private', false)
 
+      if (channelsError) {
+        throw channelsError
+      }
+
       if (channels) {
-        for (const ch of channels) {
-          await supabaseAdmin
+        for (const channel of channels) {
+          const { error: channelMemberError } = await supabaseAdmin
             .from('channel_members')
-            .insert({ channel_id: ch.id, profile_id: existingUser.id })
-            .then(() => {})
+            .insert({
+              channel_id: channel.id,
+              profile_id: existingUser.id,
+            })
+
+          // Ignore duplicate channel membership errors
+          if (
+            channelMemberError &&
+            !channelMemberError.message?.toLowerCase().includes('duplicate')
+          ) {
+            throw channelMemberError
+          }
         }
       }
 
-      const displayName = existingUser.user_metadata?.display_name || email
-      return NextResponse.json({ success: true, added: true, displayName })
+      const displayName =
+        existingUser.user_metadata?.display_name || email
+
+      return NextResponse.json({
+        success: true,
+        added: true,
+        displayName,
+      })
     }
 
     // User doesn't exist — send invite email via Supabase Auth
     const redirectTo = `${request.nextUrl.origin}/auth?workspace=${workspaceId}&email=${encodeURIComponent(email)}`
 
-    const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-      redirectTo,
-      data: {
-        workspace_id: workspaceId,
-        workspace_name: workspaceName || 'OpenHive',
-        display_name: email.split('@')[0],
-      },
-    })
+    const { error: inviteError } =
+      await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+        redirectTo,
+        data: {
+          workspace_id: workspaceId,
+          workspace_name: workspaceName || 'OpenHive',
+          display_name: email.split('@')[0],
+        },
+      })
 
-    if (error) {
-      // Handle "already invited" case
-      if (error.message?.includes('already been registered') || error.message?.includes('already exists')) {
-        return NextResponse.json({
-          error: 'This email has already been invited. They should check their inbox.',
-          alreadyInvited: true,
-        }, { status: 400 })
+    if (inviteError) {
+      // Handle already invited/registered case
+      if (
+        inviteError.message?.includes('already been registered') ||
+        inviteError.message?.includes('already exists')
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              'This email has already been invited. They should check their inbox.',
+            alreadyInvited: true,
+          },
+          { status: 400 }
+        )
       }
-      throw error
+
+      throw inviteError
     }
 
     return NextResponse.json({
@@ -138,7 +231,12 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to send invite' },
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Failed to send invite',
+      },
       { status: 500 }
     )
   }
