@@ -97,23 +97,22 @@ export function ThreadPanel() {
     }
 
     /*
-     * Stable non-null parent reference
+     * Keep a stable reference to the parent message.
      */
     const parentMessage =
       threadParentMessage
 
     /*
-     * Get Supabase client
+     * Get Supabase client once.
      */
-    const supabase =
+    const client =
       getSupabaseClient()
 
     /*
-     * IMPORTANT:
-     * getSupabaseClient() may return null.
-     * Check it before using .from(), .channel(), etc.
+     * getSupabaseClient() can return null.
+     * Check it BEFORE using it anywhere below.
      */
-    if (!supabase) {
+    if (!client) {
       console.error(
         'Supabase client is not available'
       )
@@ -127,15 +126,22 @@ export function ThreadPanel() {
     let cancelled = false
 
     /*
-     * Fetch a single reply
+     * Fetch a single reply.
+     *
+     * IMPORTANT:
+     * The client is passed into this function
+     * after it has already been checked.
      */
     async function fetchReply(
+      supabaseClient: NonNullable<
+        ReturnType<typeof getSupabaseClient>
+      >,
       messageId: string
     ): Promise<Message | null> {
       const {
         data,
         error,
-      } = await supabase
+      } = await supabaseClient
         .from('messages')
         .select(
           '*, sender:profiles(*)'
@@ -169,7 +175,7 @@ export function ThreadPanel() {
       const {
         data,
         error,
-      } = await supabase
+      } = await client
         .from('messages')
         .select(
           '*, sender:profiles(*)'
@@ -218,7 +224,7 @@ export function ThreadPanel() {
      * Supabase Realtime channel
      */
     const channel =
-      supabase.channel(
+      client.channel(
         `thread:${parentMessage.id}`
       )
 
@@ -252,6 +258,7 @@ export function ThreadPanel() {
 
         const newReply =
           await fetchReply(
+            client,
             newMessage.id
           )
 
@@ -263,6 +270,9 @@ export function ThreadPanel() {
         }
 
         setReplies((prev) => {
+          /*
+           * Prevent duplicate realtime messages.
+           */
           if (
             prev.some(
               (message) =>
@@ -332,6 +342,7 @@ export function ThreadPanel() {
          */
         const updatedReply =
           await fetchReply(
+            client,
             updatedMessage.id
           )
 
@@ -407,7 +418,7 @@ export function ThreadPanel() {
     return () => {
       cancelled = true
 
-      supabase.removeChannel(
+      client.removeChannel(
         channel
       )
     }
@@ -421,7 +432,8 @@ export function ThreadPanel() {
   }
 
   /*
-   * Build message content with attachments
+   * Build message content
+   * with attachment links.
    */
   function buildMessageContent(
     content: string,
@@ -495,15 +507,15 @@ export function ThreadPanel() {
     content: string,
     attachments?: string[]
   ) {
-    const supabase =
+    const client =
       getSupabaseClient()
 
     /*
-     * IMPORTANT:
-     * Check Supabase client before using it.
+     * Check all required values
+     * before using them.
      */
     if (
-      !supabase ||
+      !client ||
       !user ||
       !threadParentMessage
     ) {
@@ -518,7 +530,7 @@ export function ThreadPanel() {
 
     const {
       error,
-    } = await supabase
+    } = await client
       .from('messages')
       .insert({
         channel_id:
