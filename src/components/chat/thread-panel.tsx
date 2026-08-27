@@ -1,167 +1,420 @@
 'use client'
 
-import { useEffect, useState, useRef, useCallback } from 'react'
-import { X, Loader2 } from 'lucide-react'
+import {
+  useEffect,
+  useState,
+  useRef,
+  useCallback,
+} from 'react'
+
+import {
+  X,
+  Loader2,
+} from 'lucide-react'
+
 import { getSupabaseClient } from '@/lib/supabase/client'
+
 import { useAppStore } from '@/lib/store/app-store'
+
 import { MessageBubble } from './message-bubble'
+
 import { MessageInput } from './message-input'
+
 import type { Message } from '@/types/database'
 
 export function ThreadPanel() {
-  const { threadParentMessage, closeThread, user } = useAppStore()
-  const [replies, setReplies] = useState<Message[]>([])
-  const [loading, setLoading] = useState(true)
-  const bottomRef = useRef<HTMLDivElement>(null)
-  const repliesRef = useRef<Message[]>([])
+  const {
+    threadParentMessage,
+    closeThread,
+    user,
+  } = useAppStore()
+
+  const [replies, setReplies] =
+    useState<Message[]>([])
+
+  const [loading, setLoading] =
+    useState(true)
+
+  const bottomRef =
+    useRef<HTMLDivElement>(null)
+
+  const repliesRef =
+    useRef<Message[]>([])
 
   useEffect(() => {
     repliesRef.current = replies
   }, [replies])
 
-  const scrollToBottom = useCallback(() => {
-    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
+  const scrollToBottom =
+    useCallback(() => {
+      setTimeout(() => {
+        bottomRef.current?.scrollIntoView({
+          behavior: 'smooth',
+        })
+      }, 50)
+    }, [])
+
+  /*
+   * IMPORTANT:
+   * MessageBubble dispatches this event after
+   * successfully deleting a message.
+   *
+   * This makes the thread UI update immediately,
+   * without waiting for Supabase realtime.
+   */
+  useEffect(() => {
+    function handleMessageDeleted(
+      event: Event
+    ) {
+      const customEvent =
+        event as CustomEvent<{
+          messageId?: string
+          parentId?: string | null
+        }>
+
+      const messageId =
+        customEvent.detail?.messageId
+
+      if (!messageId) return
+
+      setReplies((prev) =>
+        prev.filter(
+          (reply) =>
+            reply.id !== messageId
+        )
+      )
+    }
+
+    window.addEventListener(
+      'message-deleted',
+      handleMessageDeleted
+    )
+
+    return () => {
+      window.removeEventListener(
+        'message-deleted',
+        handleMessageDeleted
+      )
+    }
   }, [])
 
+  /*
+   * Load thread replies + realtime updates
+   */
   useEffect(() => {
-    if (!threadParentMessage) return
+    if (!threadParentMessage) {
+      setReplies([])
+      return
+    }
 
-    const client = getSupabaseClient()
+    const client =
+      getSupabaseClient()
+
     if (!client) return
+
+    let cancelled = false
 
     async function loadReplies() {
       setLoading(true)
-      const { data } = await client!
-        .from('messages')
-        .select('*, sender:profiles(*)')
-        .eq('parent_id', threadParentMessage!.id)
-        .eq('is_deleted', false)
-        .order('created_at', { ascending: true })
 
-      if (data) {
-        setReplies(data as Message[])
+      const { data, error } =
+        await client
+          .from('messages')
+          .select(
+            '*, sender:profiles(*)'
+          )
+          .eq(
+            'parent_id',
+            threadParentMessage!.id
+          )
+          .eq(
+            'is_deleted',
+            false
+          )
+          .order(
+            'created_at',
+            {
+              ascending: true,
+            }
+          )
+
+      if (
+        !cancelled &&
+        !error &&
+        data
+      ) {
+        setReplies(
+          data as Message[]
+        )
+
         scrollToBottom()
       }
-      setLoading(false)
+
+      if (!cancelled) {
+        setLoading(false)
+      }
     }
 
     loadReplies()
 
-    async function fetchReply(messageId: string) {
-      const { data } = await client
-        .from('messages')
-        .select('*, sender:profiles(*)')
-        .eq('id', messageId)
-        .single()
+    /*
+     * Fetch a single reply with sender profile
+     */
+    async function fetchReply(
+      messageId: string
+    ) {
+      const { data, error } =
+        await client
+          .from('messages')
+          .select(
+            '*, sender:profiles(*)'
+          )
+          .eq(
+            'id',
+            messageId
+          )
+          .single()
+
+      if (error) {
+        console.error(
+          'Failed to fetch thread reply:',
+          error
+        )
+
+        return null
+      }
 
       return data as Message | null
     }
 
-    const sub = client
-      .channel(`thread:${threadParentMessage.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `parent_id=eq.${threadParentMessage.id}`,
-        },
-        async (payload) => {
-          const data = await fetchReply(payload.new.id)
-
-          if (data && !repliesRef.current.find((m) => m.id === data.id)) {
-            setReplies((prev) => [...prev, data as Message])
-            scrollToBottom()
-          }
-        }
+    /*
+     * Supabase Realtime
+     */
+    const channel =
+      client.channel(
+        `thread:${threadParentMessage.id}`
       )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'messages',
-          filter: `parent_id=eq.${threadParentMessage.id}`,
-        },
-        async (payload) => {
-          if (payload.new.is_deleted) {
-            setReplies((prev) =>
-              prev.filter((message) => message.id !== payload.new.id)
-            )
 
-            return
+    channel.on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `parent_id=eq.${threadParentMessage.id}`,
+      },
+      async (payload) => {
+        if (cancelled) return
+
+        const newMessage =
+          payload.new as {
+            id?: string
+            is_deleted?: boolean
           }
 
-          const updated = await fetchReply(payload.new.id)
-
-          if (updated) {
-            setReplies((prev) =>
-              prev.map((message) =>
-                message.id === updated.id ? updated : message
-              )
-            )
-          }
+        if (
+          !newMessage.id ||
+          newMessage.is_deleted
+        ) {
+          return
         }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'messages',
-          filter: `parent_id=eq.${threadParentMessage.id}`,
-        },
-        async (payload) => {
-          setReplies((prev) =>
-            prev.filter((message) => message.id !== payload.old.id)
+
+        const data =
+          await fetchReply(
+            newMessage.id
           )
+
+        if (!data || cancelled)
+          return
+
+        setReplies((prev) => {
+          if (
+            prev.some(
+              (m) =>
+                m.id === data.id
+            )
+          ) {
+            return prev
+          }
+
+          return [...prev, data]
+        })
+
+        scrollToBottom()
+      }
+    )
+
+    channel.on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'messages',
+        filter: `parent_id=eq.${threadParentMessage.id}`,
+      },
+      async (payload) => {
+        if (cancelled) return
+
+        const updatedMessage =
+          payload.new as {
+            id?: string
+            is_deleted?: boolean
+          }
+
+        if (!updatedMessage.id)
+          return
+
+        /*
+         * Soft delete:
+         * remove it from the thread immediately.
+         */
+        if (
+          updatedMessage.is_deleted
+        ) {
+          setReplies((prev) =>
+            prev.filter(
+              (message) =>
+                message.id !==
+                updatedMessage.id
+            )
+          )
+
+          return
         }
+
+        /*
+         * Normal update/edit
+         */
+        const updated =
+          await fetchReply(
+            updatedMessage.id
+          )
+
+        if (!updated || cancelled)
+          return
+
+        setReplies((prev) =>
+          prev.map((message) =>
+            message.id === updated.id
+              ? updated
+              : message
+          )
+        )
+      }
+    )
+
+    channel.on(
+      'postgres_changes',
+      {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'messages',
+        filter: `parent_id=eq.${threadParentMessage.id}`,
+      },
+      (payload) => {
+        if (cancelled) return
+
+        const deletedMessage =
+          payload.old as {
+            id?: string
+          }
+
+        if (!deletedMessage.id)
+          return
+
+        setReplies((prev) =>
+          prev.filter(
+            (message) =>
+              message.id !==
+              deletedMessage.id
+          )
+        )
+      }
+    )
+
+    channel.subscribe((status) => {
+      console.log(
+        `Thread realtime status: ${status}`
       )
-      .subscribe()
+    })
 
     return () => {
-      sub.unsubscribe()
+      cancelled = true
+      client.removeChannel(
+        channel
+      )
     }
-  }, [threadParentMessage, scrollToBottom])
+  }, [
+    threadParentMessage,
+    scrollToBottom,
+  ])
 
-  if (!threadParentMessage) return null
+  if (!threadParentMessage)
+    return null
 
   function buildMessageContent(
     content: string,
     attachments?: string[]
   ): string {
-    if (!attachments || attachments.length === 0) {
+    if (
+      !attachments ||
+      attachments.length === 0
+    ) {
       return content
     }
 
-    const attachmentLines = attachments.map((attachment) => {
-      const splitIndex = attachment.indexOf('|')
+    const attachmentLines =
+      attachments.map(
+        (attachment) => {
+          const splitIndex =
+            attachment.indexOf(
+              '|'
+            )
 
-      const hasEmbeddedName = splitIndex > 0
-      const rawName = hasEmbeddedName
-        ? attachment.slice(0, splitIndex)
-        : ''
+          const hasEmbeddedName =
+            splitIndex > 0
 
-      const url = hasEmbeddedName
-        ? attachment.slice(splitIndex + 1)
-        : attachment
+          const rawName =
+            hasEmbeddedName
+              ? attachment.slice(
+                  0,
+                  splitIndex
+                )
+              : ''
 
-      const fallbackName = decodeURIComponent(
-        url.split('?')[0].split('/').pop() || 'attachment'
+          const url =
+            hasEmbeddedName
+              ? attachment.slice(
+                  splitIndex + 1
+                )
+              : attachment
+
+          const fallbackName =
+            decodeURIComponent(
+              url
+                .split('?')[0]
+                .split('/')
+                .pop() ||
+                'attachment'
+            )
+
+          const fileName = rawName
+            ? decodeURIComponent(
+                rawName
+              )
+            : fallbackName
+
+          return `📎 [${fileName}](${url})`
+        }
       )
 
-      const fileName = rawName
-        ? decodeURIComponent(rawName)
-        : fallbackName
-
-      return `📎 [${fileName}](${url})`
-    })
-
-    const trimmed = content.trim()
+    const trimmed =
+      content.trim()
 
     return trimmed
-      ? `${trimmed}\n\n${attachmentLines.join('\n')}`
+      ? `${trimmed}\n\n${attachmentLines.join(
+          '\n'
+        )}`
       : attachmentLines.join('\n')
   }
 
@@ -169,70 +422,195 @@ export function ThreadPanel() {
     content: string,
     attachments?: string[]
   ) {
-    const client = getSupabaseClient()
-    if (!client || !user || !threadParentMessage) return
+    const client =
+      getSupabaseClient()
 
-    await client.from('messages').insert({
-      channel_id: threadParentMessage.channel_id,
-      sender_id: user.id,
-      content: buildMessageContent(content, attachments),
-      parent_id: threadParentMessage.id,
-    })
+    if (
+      !client ||
+      !user ||
+      !threadParentMessage
+    ) {
+      return
+    }
+
+    const finalContent =
+      buildMessageContent(
+        content,
+        attachments
+      )
+
+    const { error } =
+      await client
+        .from('messages')
+        .insert({
+          channel_id:
+            threadParentMessage.channel_id,
+          sender_id: user.id,
+          content: finalContent,
+          parent_id:
+            threadParentMessage.id,
+        })
+
+    if (error) {
+      console.error(
+        'Failed to send thread reply:',
+        error
+      )
+    }
   }
 
   return (
-    <div className="w-96 flex flex-col h-full" style={{ background: '#ffffff', borderLeft: '1px solid #E5E1EE' }}>
-      {/* Header */}
-      <div className="px-5 py-3 flex items-center justify-between shrink-0" style={{ borderBottom: '1px solid #E5E1EE' }}>
-        <h3 className="font-bold text-[17px]" style={{ color: '#2D2B3D' }}>Thread</h3>
-        <button className="h-8 w-8 rounded-lg flex items-center justify-center hover:bg-[#F5F2FF] transition-colors" onClick={closeThread}>
-          <X className="h-4 w-4" style={{ color: '#8E8EA0' }} />
+    <div
+      className="w-96 flex flex-col h-full"
+      style={{
+        background: '#ffffff',
+        borderLeft:
+          '1px solid #E5E1EE',
+      }}
+    >
+      {/* HEADER */}
+      <div
+        className="px-5 py-3 flex items-center justify-between shrink-0"
+        style={{
+          borderBottom:
+            '1px solid #E5E1EE',
+        }}
+      >
+        <h3
+          className="font-bold text-[17px]"
+          style={{
+            color: '#2D2B3D',
+          }}
+        >
+          Thread
+        </h3>
+
+        <button
+          className="h-8 w-8 rounded-lg flex items-center justify-center hover:bg-[#F5F2FF] transition-colors"
+          onClick={closeThread}
+        >
+          <X
+            className="h-4 w-4"
+            style={{
+              color: '#8E8EA0',
+            }}
+          />
         </button>
       </div>
 
-      {/* Parent message */}
-      <div className="px-4 pt-3 pb-2" style={{ borderBottom: '1px solid #E5E1EE' }}>
-        <MessageBubble message={threadParentMessage} showHeader isOwn={threadParentMessage.sender_id === user?.id} isThread />
+      {/* PARENT MESSAGE */}
+      <div
+        className="px-4 pt-3 pb-2"
+        style={{
+          borderBottom:
+            '1px solid #E5E1EE',
+        }}
+      >
+        <MessageBubble
+          message={
+            threadParentMessage
+          }
+          showHeader
+          isOwn={
+            threadParentMessage.sender_id ===
+            user?.id
+          }
+          isThread
+        />
       </div>
 
-      {/* Reply count */}
-      <div className="px-5 py-2 text-xs font-medium" style={{ color: '#8E8EA0', borderBottom: '1px solid #E5E1EE' }}>
-        {replies.length} {replies.length === 1 ? 'reply' : 'replies'}
+      {/* REPLY COUNT */}
+      <div
+        className="px-5 py-2 text-xs font-medium"
+        style={{
+          color: '#8E8EA0',
+          borderBottom:
+            '1px solid #E5E1EE',
+        }}
+      >
+        {replies.length}{' '}
+        {replies.length === 1
+          ? 'reply'
+          : 'replies'}
       </div>
 
-      {/* Replies */}
+      {/* REPLIES */}
       <div className="flex-1 overflow-y-auto px-4">
         <div className="py-2 space-y-1">
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin" style={{ color: '#7C5CFC' }} />
+              <Loader2
+                className="h-5 w-5 animate-spin"
+                style={{
+                  color: '#7C5CFC',
+                }}
+              />
+            </div>
+          ) : replies.length ===
+            0 ? (
+            <div
+              className="flex items-center justify-center py-10 text-sm"
+              style={{
+                color: '#8E8EA0',
+              }}
+            >
+              No replies yet
             </div>
           ) : (
-            replies.map((reply, i) => {
-              const prev = i > 0 ? replies[i - 1] : null
-              const showHeader =
-                !prev ||
-                prev.sender_id !== reply.sender_id ||
-                new Date(reply.created_at).getTime() - new Date(prev.created_at).getTime() >
-                  5 * 60 * 1000
+            replies.map(
+              (reply, i) => {
+                const prev =
+                  i > 0
+                    ? replies[i - 1]
+                    : null
 
-              return (
-                <MessageBubble
-                  key={reply.id}
-                  message={reply}
-                  showHeader={showHeader}
-                  isOwn={reply.sender_id === user?.id}
-                  isThread
-                />
-              )
-            })
+                const showHeader =
+                  !prev ||
+                  prev.sender_id !==
+                    reply.sender_id ||
+                  new Date(
+                    reply.created_at
+                  ).getTime() -
+                    new Date(
+                      prev.created_at
+                    ).getTime() >
+                    5 *
+                      60 *
+                      1000
+
+                return (
+                  <MessageBubble
+                    key={reply.id}
+                    message={reply}
+                    showHeader={
+                      showHeader
+                    }
+                    isOwn={
+                      reply.sender_id ===
+                      user?.id
+                    }
+                    isThread
+                  />
+                )
+              }
+            )
           )}
+
           <div ref={bottomRef} />
         </div>
       </div>
 
-      {/* Reply input */}
-      <MessageInput channelId={threadParentMessage?.channel_id} channelName="thread" onSend={handleSendReply} placeholder="Reply..." />
+      {/* REPLY INPUT */}
+      <MessageInput
+        channelId={
+          threadParentMessage.channel_id
+        }
+        channelName="thread"
+        onSend={
+          handleSendReply
+        }
+        placeholder="Reply..."
+      />
     </div>
   )
 }
