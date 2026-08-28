@@ -71,6 +71,63 @@ function formatDuration(totalSeconds: number): string {
 }
 
 /* ------------------------------------------------------------------ */
+/* Call leave cleanup                                                  */
+/*                                                                     */
+/* The active_calls row is what drives the "call in progress"          */
+/* indicator for the whole workspace, so it MUST be ended when         */
+/* the last participant leaves — otherwise the indicator (and          */
+/* the ability to re-join) stays forever.                              */
+/* ------------------------------------------------------------------ */
+
+async function cleanupCallMembership() {
+  const client = getSupabaseClient()
+
+  const { activeCall, user } = useAppStore.getState()
+
+  if (!client || !activeCall || !user) return
+
+  try {
+    // 1. Mark our own participant row as left
+    await client
+      .from('call_participants')
+      .update({ left_at: new Date().toISOString() })
+      .eq('call_id', activeCall.id)
+      .eq('profile_id', user.id)
+      .is('left_at', null)
+
+    // 2. If no active participants remain, end the
+    //    call for everyone.
+    //    Participants whose profile is offline are
+    //    treated as gone (handles crashed tabs and
+    //    stale rows left by older versions).
+    const { data: remaining } = await client
+      .from('call_participants')
+      .select('profile_id, profile:profiles(is_online)')
+      .eq('call_id', activeCall.id)
+      .is('left_at', null)
+
+    const activeCount = (remaining ?? []).filter(
+      (row) =>
+        (row.profile as { is_online?: boolean } | null)
+          ?.is_online === true
+    ).length
+
+    if (activeCount === 0) {
+      await client
+        .from('active_calls')
+        .update({ ended_at: new Date().toISOString() })
+        .eq('id', activeCall.id)
+        .is('ended_at', null)
+    }
+  } catch (err) {
+    console.error(
+      'Failed to clean up call membership:',
+      err
+    )
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* CallPanel — outer shell (LiveKitRoom + connection)                  */
 /* ------------------------------------------------------------------ */
 
@@ -107,6 +164,9 @@ export function CallPanel() {
         audio
         video={startsWithVideo}
         onDisconnected={() => {
+          // Covers connection drops / refresh while in
+          // the call — same DB cleanup as leaving.
+          void cleanupCallMembership()
           leaveCall()
         }}
         options={{
@@ -314,6 +374,11 @@ function CallContent({
   }
 
   async function handleLeave() {
+    // Persist "left" (and end the call when nobody
+    // remains) BEFORE disconnecting, while the call
+    // is still available in the store.
+    await cleanupCallMembership()
+
     try {
       await room.disconnect()
     } catch {
