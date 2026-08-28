@@ -137,6 +137,15 @@ export function WorkspaceSettingsDialog({ open, onOpenChange }: WorkspaceSetting
     const client = getSupabaseClient()
     if (!client || !workspace) return
 
+    const url = livekitConfig.livekit_url.trim()
+    const apiKey = livekitConfig.livekit_api_key.trim()
+    const apiSecret = livekitConfig.livekit_api_secret.trim()
+
+    if (livekitConfig.calls_enabled && (!url || !apiKey || !apiSecret)) {
+      alert('To enable calls here, fill in the LiveKit URL, API key, and API secret. Alternatively, they can be configured globally via LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET in .env.local.')
+      return
+    }
+
     setSavingLivekit(true)
     setLivekitSaved(false)
 
@@ -146,9 +155,9 @@ export function WorkspaceSettingsDialog({ open, onOpenChange }: WorkspaceSetting
         .from('workspace_settings')
         .upsert({
           workspace_id: workspace.id,
-          livekit_url: livekitConfig.livekit_url || null,
-          livekit_api_key: livekitConfig.livekit_api_key || null,
-          livekit_api_secret: livekitConfig.livekit_api_secret || null,
+          livekit_url: url || null,
+          livekit_api_key: apiKey || null,
+          livekit_api_secret: apiSecret || null,
           calls_enabled: livekitConfig.calls_enabled,
         })
 
@@ -157,6 +166,7 @@ export function WorkspaceSettingsDialog({ open, onOpenChange }: WorkspaceSetting
       setTimeout(() => setLivekitSaved(false), 2000)
     } catch (err) {
       console.error('Failed to save LiveKit config:', err)
+      alert(err instanceof Error ? `Failed to save: ${err.message}` : 'Failed to save LiveKit settings. Make sure you are a workspace admin.')
     }
     setSavingLivekit(false)
   }

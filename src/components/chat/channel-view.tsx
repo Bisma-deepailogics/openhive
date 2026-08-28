@@ -343,24 +343,40 @@ export function ChannelView({ channel, isPreview = false }: ChannelViewProps) {
     }
   }, [channel.id, setChannelActiveCall, workspace])
 
-  async function handleStartOrJoinCall() {
+  async function handleStartOrJoinCall(kind: 'audio' | 'video' = 'audio') {
     const client = getSupabaseClient()
     if (!client || !user || !workspace || isInCall) return
 
     setStartingCall(true)
 
-    // Pre-flight: check if LiveKit is configured before creating any DB records
-    if (!channelCall) {
-      const { data: settings } = await client
-        .from('workspace_settings')
-        .select('*')
-        .eq('workspace_id', workspace.id)
-        .single()
+    // Pre-flight: ask the server whether LiveKit is available before creating
+    // any DB records. The server resolves both per-workspace settings and the
+    // deployment-level (.env.local) credentials, which a direct client-side
+    // query of workspace_settings cannot see.
+    const { data: { session: preflightSession } } = await client.auth.getSession()
+    if (preflightSession?.access_token) {
+      try {
+        const statusRes = await fetch(
+          `/api/livekit/status?workspaceId=${encodeURIComponent(workspace.id)}`,
+          { headers: { Authorization: `Bearer ${preflightSession.access_token}` } }
+        )
 
-      if (!settings?.calls_enabled || !settings?.livekit_url || !settings?.livekit_api_key || !settings?.livekit_api_secret) {
-        setCallSetupOpen(true)
-        setStartingCall(false)
-        return
+        if (statusRes.ok) {
+          const status = await statusRes.json() as { configured?: boolean; enabled?: boolean }
+          if (!status.configured) {
+            setCallSetupOpen(true)
+            setStartingCall(false)
+            return
+          }
+          if (!status.enabled) {
+            alert('Calls are disabled for this workspace. An admin can enable them in Workspace Settings → Calls.')
+            setStartingCall(false)
+            return
+          }
+        }
+      } catch {
+        // Status check failed for a non-config reason — continue and let
+        // /api/livekit/token remain authoritative.
       }
     }
 
@@ -380,7 +396,7 @@ export function ChannelView({ channel, isPreview = false }: ChannelViewProps) {
           .insert({
             channel_id: channel.id,
             workspace_id: workspace.id,
-            type: 'huddle',
+            type: kind === 'video' ? 'video_call' : 'huddle',
             livekit_room_name: roomName,
             started_by: user.id,
           })
@@ -427,7 +443,8 @@ export function ChannelView({ channel, isPreview = false }: ChannelViewProps) {
       }
 
       const { token, url } = await response.json()
-      joinCall(call, token, url)
+      // Publish camera immediately when this session was started as a video call
+      joinCall(call, token, url, { withVideo: call.type === 'video_call' })
     } catch (err) {
       console.error('Failed to start/join call:', err)
 
@@ -553,40 +570,52 @@ export function ChannelView({ channel, isPreview = false }: ChannelViewProps) {
             )}
           </div>
           <div className="flex items-center gap-1">
-            {/* Call button */}
+            {/* Call controls */}
             {!isPreview && (
               <>
                 {channelCall ? (
                   <button
-                    onClick={handleStartOrJoinCall}
+                    onClick={() => void handleStartOrJoinCall(channelCall.type === 'video_call' ? 'video' : 'audio')}
                     disabled={startingCall || isInCall}
-                    className="h-8 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-colors text-[12px] font-semibold"
+                    className="h-8 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-colors text-[12px] font-semibold disabled:opacity-60"
                     style={{ background: '#DCFCE7', color: '#16A34A' }}
-                    title="Join active call"
+                    title={channelCall.type === 'video_call' ? 'Join the video call' : 'Join the huddle'}
                   >
                     {startingCall ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     ) : (
                       <>
-                        <Phone className="h-3.5 w-3.5" />
+                        {channelCall.type === 'video_call'
+                          ? <Video className="h-3.5 w-3.5" />
+                          : <Phone className="h-3.5 w-3.5" />}
                         <span className="h-2 w-2 rounded-full animate-pulse" style={{ background: '#16A34A' }} />
                         Join
                       </>
                     )}
                   </button>
                 ) : (
-                  <button
-                    onClick={handleStartOrJoinCall}
-                    disabled={startingCall || isInCall}
-                    className="h-8 w-8 rounded-lg flex items-center justify-center hover:bg-[#F5F2FF] transition-colors"
-                    title="Start a call"
-                  >
-                    {startingCall ? (
-                      <Loader2 className="h-4 w-4 animate-spin" style={{ color: '#7C5CFC' }} />
-                    ) : (
-                      <Phone className="h-4 w-4" style={{ color: '#8E8EA0' }} />
-                    )}
-                  </button>
+                  <>
+                    <button
+                      onClick={() => void handleStartOrJoinCall('audio')}
+                      disabled={startingCall || isInCall}
+                      className="h-8 w-8 rounded-lg flex items-center justify-center hover:bg-[#F5F2FF] transition-colors disabled:opacity-50"
+                      title="Start an audio huddle"
+                    >
+                      {startingCall ? (
+                        <Loader2 className="h-4 w-4 animate-spin" style={{ color: '#7C5CFC' }} />
+                      ) : (
+                        <Phone className="h-4 w-4" style={{ color: '#8E8EA0' }} />
+                      )}
+                    </button>
+                    <button
+                      onClick={() => void handleStartOrJoinCall('video')}
+                      disabled={startingCall || isInCall}
+                      className="h-8 w-8 rounded-lg flex items-center justify-center hover:bg-[#F5F2FF] transition-colors disabled:opacity-50"
+                      title="Start a video call"
+                    >
+                      <Video className="h-4 w-4" style={{ color: '#8E8EA0' }} />
+                    </button>
+                  </>
                 )}
               </>
             )}
@@ -750,7 +779,7 @@ export function ChannelView({ channel, isPreview = false }: ChannelViewProps) {
                 {isDirectMessage ? `${displayChannelName} is in a call` : 'A call is in progress in this channel'}
               </span>
               <button
-                onClick={handleStartOrJoinCall}
+                onClick={() => void handleStartOrJoinCall(channelCall.type === 'video_call' ? 'video' : 'audio')}
                 disabled={startingCall}
                 className="px-4 py-1.5 rounded-lg text-[12px] font-semibold text-white transition-all hover:opacity-90 flex items-center gap-1.5"
                 style={{ background: '#16A34A' }}
@@ -758,9 +787,9 @@ export function ChannelView({ channel, isPreview = false }: ChannelViewProps) {
                 {startingCall ? (
                   <Loader2 className="h-3 w-3 animate-spin" />
                 ) : (
-                  <Phone className="h-3 w-3" />
+                  channelCall.type === 'video_call' ? <Video className="h-3 w-3" /> : <Phone className="h-3 w-3" />
                 )}
-                Join Call
+                {channelCall.type === 'video_call' ? 'Join Video Call' : 'Join Huddle'}
               </button>
             </div>
           </div>

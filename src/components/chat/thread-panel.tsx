@@ -118,7 +118,7 @@ export function ThreadPanel() {
       setLoading(true)
 
       const { data, error } =
-        await client
+        await client!
           .from('messages')
           .select(
             '*, sender:profiles(*)'
@@ -164,7 +164,7 @@ export function ThreadPanel() {
       messageId: string
     ) {
       const { data, error } =
-        await client
+        await client!
           .from('messages')
           .select(
             '*, sender:profiles(*)'
