@@ -18,7 +18,7 @@ export function usePresence() {
     let isCleaningUp = false
 
     // -----------------------------------------
-    // Set user ONLINE
+    // Set user ONLINE (DB + local store)
     // -----------------------------------------
     const setOnline = async () => {
       if (isCleaningUp) return
@@ -31,13 +31,24 @@ export function usePresence() {
             last_seen_at: new Date().toISOString(),
           })
           .eq('id', user.id)
+
+        if (isCleaningUp) return
+
+        // Sync local presence state so the green
+        // status dot updates instantly (no refresh)
+        const state = useAppStore.getState()
+        state.setProfileOnline(user.id, true)
+
+        if (state.user?.id === user.id && !state.user.is_online) {
+          state.setUser({ ...state.user, is_online: true })
+        }
       } catch (error) {
         console.error('Failed to set user online:', error)
       }
     }
 
     // -----------------------------------------
-    // Set user OFFLINE
+    // Set user OFFLINE (DB + local store)
     // -----------------------------------------
     const setOffline = async () => {
       try {
@@ -48,6 +59,8 @@ export function usePresence() {
             last_seen_at: new Date().toISOString(),
           })
           .eq('id', user.id)
+
+        useAppStore.getState().setProfileOnline(user.id, false)
       } catch (error) {
         console.error('Failed to set user offline:', error)
       }
@@ -55,13 +68,11 @@ export function usePresence() {
 
     // -----------------------------------------
     // HEARTBEAT
-    // User is actively using the app
+    // Keeps the user online while the app is
+    // open, regardless of tab focus
     // -----------------------------------------
     const heartbeat = async () => {
       if (isCleaningUp) return
-
-      // If tab is not visible, don't keep user online
-      if (document.visibilityState !== 'visible') return
 
       try {
         await client
@@ -78,14 +89,14 @@ export function usePresence() {
 
     // -----------------------------------------
     // TAB VISIBILITY
+    // When the user returns to the app, refresh
+    // their online status right away.
+    // NOTE: switching tabs no longer marks the
+    // user offline - online means "app is open".
     // -----------------------------------------
-    const handleVisibilityChange = async () => {
+    const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        // User came back to the app
-        await setOnline()
-      } else {
-        // User switched/minimized the tab
-        await setOffline()
+        setOnline()
       }
     }
 
@@ -110,6 +121,39 @@ export function usePresence() {
     setOnline()
 
     // -----------------------------------------
+    // Realtime presence for ALL members.
+    // Updates the shared online set so every
+    // member list, DM, search result and profile
+    // panel shows live green/gray status.
+    // -----------------------------------------
+    const presenceSub = client
+      .channel('global-presence-watcher')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+        },
+        (payload) => {
+          const updatedProfile = payload.new as {
+            id?: string
+            is_online?: boolean
+          }
+
+          if (!updatedProfile.id) return
+
+          useAppStore
+            .getState()
+            .setProfileOnline(
+              updatedProfile.id,
+              updatedProfile.is_online === true
+            )
+        }
+      )
+      .subscribe()
+
+    // -----------------------------------------
     // Start heartbeat
     // -----------------------------------------
     const interval = setInterval(
@@ -117,9 +161,7 @@ export function usePresence() {
       HEARTBEAT_INTERVAL
     )
 
-    // -----------------------------------------
     // Event listeners
-    // -----------------------------------------
     document.addEventListener(
       'visibilitychange',
       handleVisibilityChange
@@ -137,6 +179,8 @@ export function usePresence() {
       isCleaningUp = true
 
       clearInterval(interval)
+
+      presenceSub.unsubscribe()
 
       document.removeEventListener(
         'visibilitychange',

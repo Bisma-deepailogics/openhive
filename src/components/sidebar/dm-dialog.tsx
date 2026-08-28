@@ -15,7 +15,10 @@ interface DmDialogProps {
 }
 
 export function DmDialog({ open, onOpenChange }: DmDialogProps) {
-  const { user, workspace, setCurrentChannelId, addDmChannel, unhideDm, dmChannels, hiddenDmIds } = useAppStore()
+  const { user, workspace, setCurrentChannelId, addDmChannel, unhideDm, dmChannels, hiddenDmIds, onlineProfileIds, seedOnlineProfiles } = useAppStore()
+
+  const isProfileOnline = (profile: Profile) =>
+    profile.is_online === true || onlineProfileIds.has(profile.id)
   const [members, setMembers] = useState<Profile[]>([])
   const [selectedMembers, setSelectedMembers] = useState<Profile[]>([])
   const [search, setSearch] = useState('')
@@ -38,6 +41,7 @@ export function DmDialog({ open, onOpenChange }: DmDialogProps) {
             .map((d: Record<string, unknown>) => d.profile as Profile)
             .filter((p) => p && p.id !== user?.id)
           setMembers(profiles)
+          seedOnlineProfiles(profiles)
         }
       })
   }, [open, workspace, user])
@@ -248,7 +252,7 @@ export function DmDialog({ open, onOpenChange }: DmDialogProps) {
                     </div>
                     <Circle
                       className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 ${
-                        member.is_online
+                        isProfileOnline(member)
                           ? 'fill-green-500 text-green-500'
                           : 'fill-muted-foreground/30 text-muted-foreground/30'
                       }`}

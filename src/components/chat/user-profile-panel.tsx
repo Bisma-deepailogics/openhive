@@ -22,7 +22,7 @@ import { formatDistanceToNow } from 'date-fns'
 import type { Profile } from '@/types/database'
 
 export function UserProfilePanel() {
-  const { user, profileUserId, closeProfile, workspace } = useAppStore()
+  const { user, profileUserId, closeProfile, workspace, onlineProfileIds, seedOnlineProfiles } = useAppStore()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [role, setRole] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -43,7 +43,10 @@ export function UserProfilePanel() {
       .eq('id', profileUserId)
       .single()
       .then(({ data }) => {
-        if (data) setProfile(data as Profile)
+        if (data) {
+          setProfile(data as Profile)
+          seedOnlineProfiles([data as Profile])
+        }
         setLoading(false)
       })
 
@@ -70,7 +73,9 @@ export function UserProfilePanel() {
 
   const displayName = profile?.display_name || 'Loading...'
   const initial = displayName[0]?.toUpperCase() || '?'
-  const isOnline = profile?.is_online ?? false
+  const isOnline =
+    (profile?.is_online ?? false) ||
+    (profile ? onlineProfileIds.has(profile.id) : false)
   const notificationsSnoozed =
     !!profile?.notifications_snooze_until &&
     new Date(profile.notifications_snooze_until) > new Date()

@@ -31,7 +31,12 @@ export function CreateChannelDialog({
     user,
     addChannel,
     setCurrentChannelId,
+    onlineProfileIds,
+    seedOnlineProfiles,
   } = useAppStore()
+
+  const isProfileOnline = (profile: Profile) =>
+    profile.is_online === true || onlineProfileIds.has(profile.id)
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -80,6 +85,7 @@ export function CreateChannelDialog({
           )
 
         setAllMembers(profiles)
+        seedOnlineProfiles(profiles)
       }
     }
 
@@ -586,7 +592,7 @@ export function CreateChannelDialog({
 
                           <Circle
                             className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 ${
-                              member.is_online
+                              isProfileOnline(member)
                                 ? 'fill-green-500 text-green-500'
                                 : 'fill-gray-300 text-gray-300'
                             }`}

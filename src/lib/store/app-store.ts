@@ -61,6 +61,9 @@ interface AppState {
   // Mobile / sidebar
   sidebarOpen: boolean
 
+  // Online presence (profile IDs currently online, kept in sync in real time)
+  onlineProfileIds: Set<string>
+
   // Actions
   setUser: (user: Profile | null) => void
   setWorkspace: (workspace: Workspace | null) => void
@@ -98,6 +101,8 @@ interface AppState {
   toggleSavedItem: (messageId: string) => void
   setSidebarOpen: (open: boolean) => void
   toggleSidebar: () => void
+  setProfileOnline: (profileId: string, online: boolean) => void
+  seedOnlineProfiles: (profiles: Profile[]) => void
   signOut: () => void
 }
 
@@ -126,6 +131,7 @@ export const useAppStore = create<AppState>((set) => ({
   channelActiveCalls: {},
   savedItemIds: new Set(),
   sidebarOpen: false,
+  onlineProfileIds: new Set(),
 
   setUser: (user) => set({ user }),
   setWorkspace: (workspace) => set({ workspace }),
@@ -279,6 +285,26 @@ export const useAppStore = create<AppState>((set) => ({
   setSavedItemIds: (savedItemIds) => set({ savedItemIds }),
   setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
   toggleSidebar: () => set(state => ({ sidebarOpen: !state.sidebarOpen })),
+  setProfileOnline: (profileId, online) =>
+    set((state) => {
+      const next = new Set(state.onlineProfileIds)
+      if (online) {
+        next.add(profileId)
+      } else {
+        next.delete(profileId)
+      }
+      return { onlineProfileIds: next }
+    }),
+  seedOnlineProfiles: (profiles) =>
+    set((state) => {
+      const next = new Set(state.onlineProfileIds)
+      for (const profile of profiles) {
+        if (profile?.is_online) {
+          next.add(profile.id)
+        }
+      }
+      return { onlineProfileIds: next }
+    }),
   toggleSavedItem: (messageId) => set(state => {
     const newSet = new Set(state.savedItemIds)
     if (newSet.has(messageId)) {
@@ -293,6 +319,7 @@ export const useAppStore = create<AppState>((set) => ({
       user: null,
       workspace: null,
       workspaceRole: null,
+      onlineProfileIds: new Set(),
       channels: [],
       dmChannels: [],
       currentChannelId: null,

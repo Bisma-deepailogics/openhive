@@ -27,7 +27,10 @@ interface MemberWithRole {
 }
 
 export function ChannelSettingsDialog({ open, onOpenChange, channel }: ChannelSettingsDialogProps) {
-  const { user, workspace, removeChannel, updateChannel, setCurrentChannelId, channels, mutedChannelIds, muteChannel, unmuteChannel } = useAppStore()
+  const { user, workspace, removeChannel, updateChannel, setCurrentChannelId, channels, mutedChannelIds, muteChannel, unmuteChannel, onlineProfileIds, seedOnlineProfiles } = useAppStore()
+
+  const isProfileOnline = (profile: Profile) =>
+    profile.is_online === true || onlineProfileIds.has(profile.id)
   const [members, setMembers] = useState<MemberWithRole[]>([])
   const [allWorkspaceMembers, setAllWorkspaceMembers] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
@@ -83,6 +86,7 @@ export function ChannelSettingsDialog({ open, onOpenChange, channel }: ChannelSe
 
       setMembers(mems)
       setIsMember(mems.some((m) => m.profile.id === user?.id))
+      seedOnlineProfiles(mems.map((m) => m.profile))
     }
     setLoading(false)
   }
@@ -101,6 +105,7 @@ export function ChannelSettingsDialog({ open, onOpenChange, channel }: ChannelSe
         .map((d: Record<string, unknown>) => d.profile as Profile)
         .filter(Boolean)
       setAllWorkspaceMembers(profiles)
+      seedOnlineProfiles(profiles)
     }
   }
 
@@ -357,7 +362,7 @@ export function ChannelSettingsDialog({ open, onOpenChange, channel }: ChannelSe
                   )}
                   <Circle
                     className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 ${
-                      m.profile.is_online ? 'fill-green-500 text-green-500' : 'fill-gray-300 text-gray-300'
+                      isProfileOnline(m.profile) ? 'fill-green-500 text-green-500' : 'fill-gray-300 text-gray-300'
                     }`}
                     strokeWidth={3}
                     stroke="white"
@@ -561,7 +566,7 @@ export function ChannelSettingsDialog({ open, onOpenChange, channel }: ChannelSe
                       )}
                       <Circle
                         className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 ${
-                          m.profile.is_online ? 'fill-green-500 text-green-500' : 'fill-gray-300 text-gray-300'
+                          isProfileOnline(m.profile) ? 'fill-green-500 text-green-500' : 'fill-gray-300 text-gray-300'
                         }`}
                         strokeWidth={3}
                         stroke="white"

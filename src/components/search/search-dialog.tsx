@@ -20,7 +20,7 @@ type Result =
   | { type: 'user'; user: Profile }
 
 export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
-  const { workspace, user, channels, dmChannels, setCurrentChannelId, setPreviewChannel, openProfile } = useAppStore()
+  const { workspace, user, channels, dmChannels, setCurrentChannelId, setPreviewChannel, openProfile, onlineProfileIds } = useAppStore()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Result[]>([])
   const [loading, setLoading] = useState(false)
@@ -401,7 +401,7 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
                         </div>
                         <div className={cn(
                           'h-2 w-2 rounded-full shrink-0',
-                          r.user.is_online ? 'bg-green-500' : 'bg-muted-foreground/20'
+                          r.user.is_online || onlineProfileIds.has(r.user.id) ? 'bg-green-500' : 'bg-muted-foreground/20'
                         )} />
                       </button>
                     )

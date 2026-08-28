@@ -50,7 +50,10 @@ interface LiveKitConfig {
 }
 
 export function WorkspaceSettingsDialog({ open, onOpenChange }: WorkspaceSettingsDialogProps) {
-  const { user, workspace, workspaceRole, setWorkspace } = useAppStore()
+  const { user, workspace, workspaceRole, setWorkspace, onlineProfileIds, seedOnlineProfiles } = useAppStore()
+
+  const isProfileOnline = (profile: Profile) =>
+    profile.is_online === true || onlineProfileIds.has(profile.id)
   const [members, setMembers] = useState<MemberWithRole[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -109,6 +112,7 @@ export function WorkspaceSettingsDialog({ open, onOpenChange }: WorkspaceSetting
         })
 
       setMembers(mems)
+      seedOnlineProfiles(mems.map((m) => m.profile))
     }
     setLoading(false)
   }
@@ -366,7 +370,7 @@ export function WorkspaceSettingsDialog({ open, onOpenChange }: WorkspaceSetting
                         )}
                         <Circle
                           className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 ${
-                            m.profile.is_online
+                            isProfileOnline(m.profile)
                               ? 'fill-green-500 text-green-500'
                               : 'fill-gray-300 text-gray-300'
                           }`}

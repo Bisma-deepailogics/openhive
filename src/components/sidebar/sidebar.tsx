@@ -61,6 +61,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
     unmuteChannel,
     channelActiveCalls,
     setChannelActiveCall,
+    onlineProfileIds,
   } = useAppStore()
 
   const [channelsOpen, setChannelsOpen] = useState(true)
@@ -79,7 +80,11 @@ export function Sidebar({ onNavigate }: SidebarProps) {
   // Presence
   // ---------------------------------------------------------
   const isUserOnline = (profile?: Profile) => {
-    return profile?.is_online === true
+    if (!profile) return false
+    return (
+      profile.is_online === true ||
+      onlineProfileIds.has(profile.id)
+    )
   }
 
   // ---------------------------------------------------------
@@ -1392,7 +1397,9 @@ const presenceSub = client
                 <Circle
                   className={cn(
                     'absolute -bottom-0.5 -right-0.5 h-3 w-3',
-                    user?.is_online === true
+                    user &&
+                    (user.is_online === true ||
+                      onlineProfileIds.has(user.id))
                       ? 'fill-green-500 text-green-500'
                       : 'fill-gray-300 text-gray-300'
                   )}

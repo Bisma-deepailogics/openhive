@@ -542,6 +542,7 @@ function PeopleDrawer({
   const [loadingMembers, setLoadingMembers] = useState(true)
   const [query, setQuery] = useState('')
   const [ringStatus, setRingStatus] = useState<Record<string, RingStatus>>({})
+  const { onlineProfileIds, seedOnlineProfiles } = useAppStore()
 
   const connectedIds = useMemo(
     () => new Set(participants.map((p) => p.identity)),
@@ -575,6 +576,7 @@ function PeopleDrawer({
         .filter((profile): profile is Profile => !!profile)
 
       setMembers(profiles)
+      seedOnlineProfiles(profiles)
       setLoadingMembers(false)
     }
 
@@ -743,7 +745,7 @@ function PeopleDrawer({
                       <div className="text-[13px] font-medium truncate" style={{ color: '#ffffff' }}>
                         {profile.display_name}
                       </div>
-                      {profile.is_online && (
+                      {(profile.is_online || onlineProfileIds.has(profile.id)) && (
                         <div className="flex items-center gap-1">
                           <span className="h-1.5 w-1.5 rounded-full" style={{ background: '#2BAC76' }} />
                           <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.45)' }}>
