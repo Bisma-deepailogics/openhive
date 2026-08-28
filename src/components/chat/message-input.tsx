@@ -649,6 +649,11 @@ export function MessageInput({
   const startRecording = useCallback(async (type: 'audio' | 'video') => {
     if (recordingType || uploading || sending) return
 
+    if (typeof window !== 'undefined' && !window.isSecureContext) {
+      alert('Microphone and camera access require a secure connection. Open OpenHive using https:// or http://localhost, then try again.')
+      return
+    }
+
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
       alert('Recording is not supported by this browser. You can use + to upload a clip instead.')
       return
@@ -684,10 +689,17 @@ export function MessageInput({
       }
 
       recorder.onstop = () => {
-        const blob = new Blob(mediaChunksRef.current, {
-          type: recorder.mimeType || (type === 'video' ? 'video/webm' : 'audio/webm'),
-        })
-        const file = new File([blob], `${type}-clip-${Date.now()}.webm`, { type: blob.type })
+        // Strip codec parameters ("audio/webm;codecs=opus" -> "audio/webm") so
+        // the upload API's MIME allow-list matches the recorded container.
+        const rawType = recorder.mimeType || (type === 'video' ? 'video/webm' : 'audio/webm')
+        const baseType = rawType.split(';')[0].trim().toLowerCase()
+          || (type === 'video' ? 'video/webm' : 'audio/webm')
+        const extension = baseType.includes('mp4') ? 'mp4'
+          : baseType.includes('ogg') ? 'ogg'
+          : 'webm'
+
+        const blob = new Blob(mediaChunksRef.current, { type: baseType })
+        const file = new File([blob], `${type}-clip-${Date.now()}.${extension}`, { type: baseType })
 
         mediaStreamRef.current?.getTracks().forEach((track) => track.stop())
         mediaStreamRef.current = null
@@ -705,9 +717,17 @@ export function MessageInput({
       mediaRecorderRef.current = null
       setRecordingType(null)
       console.error('Recording failed:', error)
-      alert(error instanceof DOMException && error.name === 'NotAllowedError'
-        ? `Please allow ${type === 'video' ? 'camera and microphone' : 'microphone'} access.`
-        : `Unable to start ${type} recording.`)
+
+      const failureName = error instanceof DOMException ? error.name : ''
+      if (failureName === 'NotAllowedError' || failureName === 'SecurityError') {
+        alert(`Please allow ${type === 'video' ? 'camera and microphone' : 'microphone'} access for this site, then try again.`)
+      } else if (failureName === 'NotFoundError' || failureName === 'OverconstrainedError') {
+        alert(`No ${type === 'video' ? 'camera or microphone' : 'microphone'} was found on this device. Connect one and try again.`)
+      } else if (failureName === 'NotReadableError' || failureName === 'TrackStartError') {
+        alert(`Your ${type === 'video' ? 'camera or microphone' : 'microphone'} appears to be busy in another app. Close it and try again.`)
+      } else {
+        alert(`Unable to start ${type} recording.`)
+      }
     }
   }, [recordingType, sending, uploading, uploadFiles])
 

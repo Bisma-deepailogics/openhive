@@ -30,6 +30,8 @@ const ALLOWED_MIME_TYPES = new Set([
   'audio/mpeg',
   'audio/wav',
   'audio/ogg',
+  'audio/webm',
+  'audio/mp4',
 
   'video/mp4',
   'video/webm',
@@ -167,7 +169,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (file.type && !ALLOWED_MIME_TYPES.has(file.type)) {
+    // Compare against the base type only ("audio/webm;codecs=opus" ->
+    // "audio/webm") so browser-recorded clips that carry codec parameters
+    // pass the allow-list check instead of being rejected.
+    const baseMimeType = file.type.split(';')[0].trim().toLowerCase()
+
+    if (file.type && !ALLOWED_MIME_TYPES.has(baseMimeType)) {
       return NextResponse.json(
         {
           error: `File type "${file.type}" is not allowed`,

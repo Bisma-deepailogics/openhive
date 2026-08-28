@@ -49,6 +49,8 @@ interface AppState {
   // Calls
   activeCall: ActiveCall | null
   isInCall: boolean
+  /** When true, publish the camera immediately upon connecting to the room */
+  startsWithVideo: boolean
   callToken: string | null
   callUrl: string | null
   channelActiveCalls: Record<string, ActiveCall> // channelId -> ActiveCall
@@ -89,7 +91,7 @@ interface AppState {
   setReactions: (messageId: string, reactions: Reaction[]) => void
   addReaction: (messageId: string, reaction: Reaction) => void
   removeReaction: (messageId: string, reactionId: string) => void
-  joinCall: (call: ActiveCall, token: string, url: string) => void
+  joinCall: (call: ActiveCall, token: string, url: string, opts?: { withVideo?: boolean }) => void
   leaveCall: () => void
   setChannelActiveCall: (channelId: string, call: ActiveCall | null) => void
   setSavedItemIds: (ids: Set<string>) => void
@@ -118,6 +120,7 @@ export const useAppStore = create<AppState>((set) => ({
   reactions: {},
   activeCall: null,
   isInCall: false,
+  startsWithVideo: false,
   callToken: null,
   callUrl: null,
   channelActiveCalls: {},
@@ -247,10 +250,22 @@ export const useAppStore = create<AppState>((set) => ({
         [messageId]: (state.reactions[messageId] || []).filter((r) => r.id !== reactionId),
       },
     })),
-  joinCall: (call, token, url) =>
-    set({ activeCall: call, callToken: token, callUrl: url, isInCall: true }),
+  joinCall: (call, token, url, opts) =>
+    set({
+      activeCall: call,
+      callToken: token,
+      callUrl: url,
+      isInCall: true,
+      startsWithVideo: !!opts?.withVideo,
+    }),
   leaveCall: () =>
-    set({ activeCall: null, callToken: null, callUrl: null, isInCall: false }),
+    set({
+      activeCall: null,
+      callToken: null,
+      callUrl: null,
+      isInCall: false,
+      startsWithVideo: false,
+    }),
   setChannelActiveCall: (channelId, call) =>
     set((state) => {
       const updated = { ...state.channelActiveCalls }
@@ -293,6 +308,7 @@ export const useAppStore = create<AppState>((set) => ({
       reactions: {},
       activeCall: null,
       isInCall: false,
+      startsWithVideo: false,
       callToken: null,
       callUrl: null,
       channelActiveCalls: {},

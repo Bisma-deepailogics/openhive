@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { AccessToken } from 'livekit-server-sdk'
+import { resolveLiveKitCredentials } from '@/lib/server/livekit'
 
 export async function POST(request: NextRequest) {
   try {
     const { roomName, workspaceId, identity, displayName } = await request.json()
 
-    if (!roomName || !workspaceId || !identity || !displayName) {
+    if (!roomName || !workspaceId || !identity) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
@@ -35,37 +36,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
     }
 
-    // Look up workspace settings for LiveKit credentials
-    const { data: settings, error: settingsError } = await supabase
+    // Look up workspace settings for LiveKit credentials (row may not exist)
+    const { data: settings } = await supabase
       .from('workspace_settings')
       .select('*')
       .eq('workspace_id', workspaceId)
-      .single()
+      .maybeSingle()
 
-    if (settingsError || !settings) {
+    // Resolve credentials: per-workspace settings take precedence,
+    // deployment-level .env.local values (LIVEKIT_URL / LIVEKIT_API_KEY /
+    // LIVEKIT_API_SECRET) act as a global fallback.
+    const livekit = resolveLiveKitCredentials(settings)
+
+    if (!livekit.configured || !livekit.url || !livekit.apiKey || !livekit.apiSecret) {
       return NextResponse.json(
-        { error: 'LiveKit not configured. Set up LiveKit in workspace settings.' },
+        { error: 'LiveKit is not configured. Add credentials in Workspace Settings → Calls, or set LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET in .env.local.' },
         { status: 400 }
       )
     }
 
-    if (!settings.calls_enabled) {
+    if (!livekit.enabled) {
       return NextResponse.json({ error: 'Calls are disabled for this workspace' }, { status: 400 })
-    }
-
-    if (!settings.livekit_url || !settings.livekit_api_key || !settings.livekit_api_secret) {
-      return NextResponse.json(
-        { error: 'LiveKit credentials not configured. Add them in workspace settings.' },
-        { status: 400 }
-      )
     }
 
     // SECURITY: Use verified user.id as identity (not client-supplied value)
     // This prevents identity spoofing — the client can suggest a displayName
     // but the identity is always the authenticated user's ID
-    const token = new AccessToken(settings.livekit_api_key, settings.livekit_api_secret, {
+    const token = new AccessToken(livekit.apiKey, livekit.apiSecret, {
       identity: user.id,
-      name: displayName,
+      name: displayName || user.email || user.id,
     })
 
     token.addGrant({
@@ -79,7 +78,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       token: jwt,
-      url: settings.livekit_url,
+      url: livekit.url,
     })
   } catch (error) {
     console.error('LiveKit token error:', error)
