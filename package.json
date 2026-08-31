@@ -12,7 +12,7 @@
     "lint": "eslint",
     "electron:dev": "electron .",
     "electron:preview": "npm run build && cross-env OPENHIVE_MODE=prod electron .",
-    "electron:build": "npm run build && electron-builder --win"
+    "electron:build": "npm run build && electron-builder"
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",
@@ -60,9 +60,11 @@
   "build": {
     "appId": "app.openhive.desktop",
     "productName": "OpenHive",
+
     "directories": {
       "output": "dist-electron"
     },
+
     "files": [
       "electron/**/*",
       "package.json",
@@ -72,6 +74,7 @@
       "!dist-electron/**",
       "!.git/**"
     ],
+
     "extraResources": [
       {
         "from": ".next/standalone",
@@ -102,14 +105,30 @@
         ]
       }
     ],
+
     "win": {
       "target": [
         "nsis"
       ]
     },
+
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
+    },
+
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.social-networking"
+    },
+
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Network"
     }
   }
 }

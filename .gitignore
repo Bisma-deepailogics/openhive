@@ -43,3 +43,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Electron build output
+dist-electron/
+dist-electron2/
+dist/
+*.exe
+*.dmg
+*.AppImage
+*.msi
+
+# Environment variables
+.env.local
+.env
