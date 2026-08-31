@@ -201,7 +201,7 @@
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(124, 92, 252, 0.1), 0 2px 8px rgba(0,0,0,0.06);
   padding: 4px;
-  max-height: 200px;
+  max-height: 280px;
   overflow-y: auto;
   min-width: 200px;
 }
@@ -238,6 +238,18 @@
   font-weight: 700;
   color: #7C5CFC;
   flex-shrink: 0;
+}
+
+/* Keep long code blocks / URLs inside the message bubble (also in threads) */
+.message-content pre {
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.message-content code {
+  word-break: break-word;
 }
 
 /* Message content rendering */

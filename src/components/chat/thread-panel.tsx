@@ -87,10 +87,33 @@ export function ThreadPanel() {
   }, [])
 
   /*
+   * Report the live reply count (deleted replies are excluded) so the
+   * channel list's "N replies" indicator on the parent stays accurate
+   * even after replies are deleted.
+   */
+  useEffect(() => {
+    if (!threadParentMessage) return
+
+    const count = replies.filter(
+      (reply) => !reply.is_deleted
+    ).length
+
+    window.dispatchEvent(
+      new CustomEvent('thread-reply-count', {
+        detail: {
+          parentId: threadParentMessage.id,
+          count,
+        },
+      })
+    )
+  }, [replies, threadParentMessage])
+
+  /*
    * Load thread replies + realtime
    */
   useEffect(() => {
     if (!threadParentMessage) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting panel state when the thread closes
       setReplies([])
       setLoading(false)
       return
@@ -553,7 +576,7 @@ export function ThreadPanel() {
 
   return (
     <div
-      className="w-96 flex flex-col h-full"
+      className="w-96 min-w-0 flex flex-col h-full overflow-hidden"
       style={{
         background: '#ffffff',
         borderLeft:
@@ -627,7 +650,7 @@ export function ThreadPanel() {
       </div>
 
       {/* REPLIES */}
-      <div className="flex-1 overflow-y-auto px-4">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-4">
         <div className="py-2 space-y-1">
           {loading ? (
             <div className="flex items-center justify-center py-8">

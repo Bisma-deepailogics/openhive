@@ -451,7 +451,7 @@ export function MessageBubble({
     showMoreMenu
 
   return (
-    <div ref={containerRef}>
+    <div ref={containerRef} className="min-w-0 max-w-full">
       <div
         className={`relative flex gap-2.5 px-3 -mx-3 rounded-xl ${
           showHeader

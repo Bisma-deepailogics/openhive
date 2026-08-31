@@ -25,6 +25,7 @@ import {
   Bookmark,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { findOrCreateDmChannel } from '@/lib/dm'
 import { CreateChannelDialog } from './create-channel-dialog'
 import { DmDialog } from './dm-dialog'
 import { BrowseChannelsDialog } from './browse-channels-dialog'
@@ -55,6 +56,8 @@ export function Sidebar({ onNavigate }: SidebarProps) {
     unreadActivityCount,
     hiddenDmIds,
     hideDm,
+    unhideDm,
+    addDmChannel,
     unreadCounts,
     mutedChannelIds,
     muteChannel,
@@ -85,6 +88,75 @@ export function Sidebar({ onNavigate }: SidebarProps) {
       profile.is_online === true ||
       onlineProfileIds.has(profile.id)
     )
+  }
+
+  // ---------------------------------------------------------
+  // Workspace members — shown under Direct Messages so a DM
+  // can be started with one click (no searching required)
+  // ---------------------------------------------------------
+  const [workspaceMembers, setWorkspaceMembers] = useState<Profile[]>([])
+  const [startingDmId, setStartingDmId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!workspace) return
+
+    const client = getSupabaseClient()
+    if (!client) return
+
+    let cancelled = false
+
+    client
+      .from('workspace_members')
+      .select('profile:profiles(*)')
+      .eq('workspace_id', workspace.id)
+      .then(({ data }) => {
+        if (cancelled || !data) return
+
+        const profiles = data
+          .map((d: Record<string, unknown>) => d.profile as Profile)
+          .filter((p): p is Profile => Boolean(p && p.id && p.id !== user?.id))
+          .sort((a, b) => a.display_name.localeCompare(b.display_name))
+
+        setWorkspaceMembers(profiles)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [workspace, user?.id])
+
+  async function openDmWithMember(member: Profile) {
+    const client = getSupabaseClient()
+    if (!client || !user || !workspace || startingDmId) return
+
+    setStartingDmId(member.id)
+
+    try {
+      const channelId = await findOrCreateDmChannel(client, workspace.id, user, member)
+
+      if (hiddenDmIds.includes(channelId)) {
+        unhideDm(channelId)
+      }
+
+      if (!dmChannels.some((d) => d.id === channelId)) {
+        const { data: channelData } = await client
+          .from('channels')
+          .select('*')
+          .eq('id', channelId)
+          .single()
+
+        if (channelData) {
+          addDmChannel({ ...channelData, otherUser: member })
+        }
+      }
+
+      setCurrentChannelId(channelId)
+      onNavigate?.()
+    } catch (err) {
+      console.error('Failed to open DM:', err)
+    } finally {
+      setStartingDmId(null)
+    }
   }
 
   // ---------------------------------------------------------
@@ -1318,6 +1390,74 @@ const presenceSub = client
                       </div>
                     )
                   })}
+
+                  {/* WORKSPACE MEMBERS — one-click DMs, no search needed */}
+                  {workspaceMembers.length > 0 && (
+                    <div className="mt-3 pt-2 border-t border-[#E5E1EE]">
+                      <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-[#8E8EA0]">
+                        Workspace members
+                      </p>
+
+                      {workspaceMembers.map((member) => {
+                        const memberOnline = isUserOnline(member)
+
+                        return (
+                          <button
+                            key={member.id}
+                            onClick={() => void openDmWithMember(member)}
+                            disabled={startingDmId === member.id}
+                            className="w-full flex items-center gap-2 px-3 py-[6px] rounded-lg text-[14px] transition-all hover:bg-[#E0D6FF] text-left disabled:opacity-60"
+                            style={{ color: '#4A4860' }}
+                            title={`Message ${member.display_name}`}
+                          >
+                            <div className="relative shrink-0 w-5 h-5">
+                              {member.avatar_url ? (
+                                <Image
+                                  src={member.avatar_url}
+                                  alt=""
+                                  width={20}
+                                  height={20}
+                                  unoptimized
+                                  className="h-5 w-5 rounded-md object-cover"
+                                />
+                              ) : (
+                                <div
+                                  className="h-5 w-5 rounded-md flex items-center justify-center text-[9px] font-bold"
+                                  style={{
+                                    background: '#E0D6FF',
+                                    color: '#7C5CFC',
+                                  }}
+                                >
+                                  {member.display_name[0]?.toUpperCase() || '?'}
+                                </div>
+                              )}
+
+                              <Circle
+                                className={cn(
+                                  'absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5',
+                                  memberOnline
+                                    ? 'fill-green-500 text-green-500'
+                                    : 'fill-gray-300 text-gray-300'
+                                )}
+                                strokeWidth={3}
+                                stroke="#F0EBFF"
+                              />
+                            </div>
+
+                            <span className="truncate flex-1 text-left">
+                              {member.display_name}
+                            </span>
+
+                            {startingDmId === member.id && (
+                              <span className="text-[10px] text-[#8E8EA0] shrink-0">
+                                opening…
+                              </span>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
 
                 {dmChannels.filter(
                   (dm) =>

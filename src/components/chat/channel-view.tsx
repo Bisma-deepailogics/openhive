@@ -51,6 +51,32 @@ export function ChannelView({ channel, isPreview = false }: ChannelViewProps) {
     messagesRef.current = messages
   }, [messages])
 
+  /*
+   * Thread panels report the live reply count (deleted replies excluded),
+   * so the "N replies" indicator on the parent message stays accurate.
+   */
+  useEffect(() => {
+    function handleThreadReplyCount(event: Event) {
+      const detail = (
+        event as CustomEvent<{ parentId?: string; count?: number }>
+      ).detail
+
+      if (!detail?.parentId || typeof detail.count !== 'number') return
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === detail.parentId
+            ? { ...m, thread_reply_count: detail.count as number }
+            : m
+        )
+      )
+    }
+
+    window.addEventListener('thread-reply-count', handleThreadReplyCount)
+    return () =>
+      window.removeEventListener('thread-reply-count', handleThreadReplyCount)
+  }, [])
+
   const scrollToBottom = useCallback(() => {
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
   }, [])

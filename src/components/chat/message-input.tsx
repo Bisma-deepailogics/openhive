@@ -317,7 +317,10 @@ export function MessageInput({
               .filter((member) =>
                 getDisplayName(member).toLowerCase().includes(normalizedQuery)
               )
-              .slice(0, 8)
+              .sort((a, b) =>
+                getDisplayName(a).localeCompare(getDisplayName(b))
+              )
+              .slice(0, 50)
           },
 
           render: () => {
@@ -1199,7 +1202,8 @@ export function MessageInput({
                       <div className="max-h-[210px] overflow-y-auto px-1 pb-1">
                         {members
                           .filter((member) => getDisplayName(member).toLowerCase().includes(mentionQuery.trim().toLowerCase()))
-                          .slice(0, 20)
+                          .sort((a, b) => getDisplayName(a).localeCompare(getDisplayName(b)))
+                          .slice(0, 50)
                           .map((member) => {
                             const name = getDisplayName(member)
                             return (
