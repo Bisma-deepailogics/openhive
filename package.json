@@ -64,6 +64,13 @@
     "appId": "app.openhive.desktop",
     "productName": "OpenHive",
 
+    "protocols": [
+      {
+        "name": "OpenHive",
+        "schemes": ["openhive"]
+      }
+    ],
+
     "directories": {
       "output": "dist-electron",
       "buildResources": "electron/build"
