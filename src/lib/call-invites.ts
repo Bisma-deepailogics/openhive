@@ -31,7 +31,7 @@ export async function ringProfile(
   const client = getSupabaseClient()
   if (!client) return false
 
-  let channel = client.channel(`ring-${profileId}`)
+  const channel = client.channel(`ring-${profileId}`)
 
   try {
     const subscribed = await new Promise<boolean>((resolve) => {

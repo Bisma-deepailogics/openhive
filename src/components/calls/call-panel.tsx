@@ -707,6 +707,7 @@ function PeopleDrawer({
 
   useEffect(() => {
     if (!channelId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- nothing to load without a channel; clear the spinner (intentional state sync)
       setLoadingMembers(false);
       return;
     }

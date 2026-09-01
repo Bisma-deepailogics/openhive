@@ -35,6 +35,7 @@ export function UserProfilePanel() {
     const client = getSupabaseClient()
     if (!client) return
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- show the loading state while the profile is fetched (intentional state sync)
     setLoading(true)
 
     client
@@ -65,6 +66,7 @@ export function UserProfilePanel() {
 
   useEffect(() => {
     if (isOwnProfile && user) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- mirror the signed-in user's profile into local state (intentional state sync)
       setProfile(user)
     }
   }, [isOwnProfile, user])

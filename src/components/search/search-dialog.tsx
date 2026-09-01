@@ -126,6 +126,7 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
   // Debounced search
   useEffect(() => {
     if (!query.trim()) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset results when the query is cleared (intentional state sync)
       setResults([])
       return
     }
@@ -137,6 +138,7 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
   // Reset on close
   useEffect(() => {
     if (!open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear search state when the dialog closes (intentional state sync)
       setQuery('')
       setResults([])
       setActiveIndex(-1)
@@ -213,7 +215,7 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
   const messageResults = results.filter((r) => r.type === 'message')
 
   // Compute flat index for each result for keyboard nav
-  let flatIndex = 0
+  const flatIndex = 0
   const channelStartIndex = 0
   const userStartIndex = channelResults.length
   const messageStartIndex = channelResults.length + userResults.length

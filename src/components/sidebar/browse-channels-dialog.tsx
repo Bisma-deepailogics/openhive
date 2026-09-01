@@ -26,17 +26,6 @@ export function BrowseChannelsDialog({ open, onOpenChange }: BrowseChannelsDialo
   const [loading, setLoading] = useState(false)
   const [joiningId, setJoiningId] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (!open || !workspace || !user) return
-    loadChannels()
-  }, [open, workspace, user])
-
-  useEffect(() => {
-    if (!open) {
-      setSearch('')
-    }
-  }, [open])
-
   async function loadChannels() {
     const client = getSupabaseClient()
     if (!client || !workspace || !user) return
@@ -87,6 +76,19 @@ export function BrowseChannelsDialog({ open, onOpenChange }: BrowseChannelsDialo
     setAllChannels(withInfo)
     setLoading(false)
   }
+
+  useEffect(() => {
+    if (!open || !workspace || !user) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loadChannels sets the loading flag synchronously by design (intentional state sync)
+    loadChannels()
+  }, [open, workspace, user])
+
+  useEffect(() => {
+    if (!open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear the search box when the dialog closes (intentional state sync)
+      setSearch('')
+    }
+  }, [open])
 
   async function handleJoin(channel: ChannelWithInfo) {
     const client = getSupabaseClient()

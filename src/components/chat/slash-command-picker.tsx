@@ -51,6 +51,7 @@ export function SlashCommandPicker({ query, onSelect, onClose, position }: Slash
   ]
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset keyboard selection whenever the query changes (intentional state sync)
     setSelectedIndex(0)
   }, [query])
 
