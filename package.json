@@ -12,7 +12,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "electron:dev": "electron .",
+    "electron:prepare": "npm install --prefix electron --ignore-scripts --no-audit --no-fund",
+    "electron:build": "npm run electron:prepare && electron-builder --publish never",
+    "electron:build:mac": "npm run electron:prepare && electron-builder --mac --publish never",
+    "electron:build:win": "npm run electron:prepare && electron-builder --win --x64 --publish never"
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",
@@ -56,5 +61,58 @@
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "build": {
+    "appId": "com.deepailogics.openhive",
+    "productName": "OpenHive",
+    "asar": true,
+    "protocols": [
+      {
+        "name": "OpenHive",
+        "schemes": [
+          "openhive"
+        ]
+      }
+    ],
+    "directories": {
+      "app": "electron",
+      "output": "dist-electron",
+      "buildResources": "electron/build"
+    },
+    "files": [
+      "main.js",
+      "package.json"
+    ],
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "category": "public.app-category.social-networking",
+      "identity": null
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "OpenHive"
+    }
   }
 }

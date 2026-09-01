@@ -1,0 +1,11 @@
+{
+  "name": "openhive-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenHive employee desktop app",
+  "author": "OpenHive",
+  "main": "main.js",
+  "dependencies": {
+    "openhive-shell-runtime": "file:runtime"
+  }
+}

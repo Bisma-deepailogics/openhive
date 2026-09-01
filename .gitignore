@@ -46,6 +46,7 @@ next-env.d.ts
 
 # Electron build output
 dist-electron/
+electron/node_modules/
 dist-electron2/
 dist/
 *.exe
