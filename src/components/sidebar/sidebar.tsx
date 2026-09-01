@@ -91,8 +91,9 @@ export function Sidebar({ onNavigate }: SidebarProps) {
   }
 
   // ---------------------------------------------------------
-  // Workspace members — shown under Direct Messages so a DM
-  // can be started with one click (no searching required)
+  // Workspace members — listed directly inside the Direct
+  // Messages section (mention-style rows) so a DM can be
+  // started with one click, no search required.
   // ---------------------------------------------------------
   const [workspaceMembers, setWorkspaceMembers] = useState<Profile[]>([])
   const [startingDmId, setStartingDmId] = useState<string | null>(null)
@@ -124,6 +125,17 @@ export function Sidebar({ onNavigate }: SidebarProps) {
       cancelled = true
     }
   }, [workspace, user?.id])
+
+  // Members still to show in the Direct Messages list — anyone who already
+  // has an open, visible 1:1 DM appears as a conversation row above, so
+  // they are not listed twice.
+  const visibleDmOtherIds = new Set(
+    dmChannels
+      .filter((dm) => !hiddenDmIds.includes(dm.id) && !dm.name.startsWith('gdm-'))
+      .map((dm) => dm.otherUser?.id)
+      .filter((id): id is string => Boolean(id)),
+  )
+  const dmListMembers = workspaceMembers.filter((m) => !visibleDmOtherIds.has(m.id))
 
   async function openDmWithMember(member: Profile) {
     const client = getSupabaseClient()
@@ -1391,78 +1403,67 @@ const presenceSub = client
                     )
                   })}
 
-                  {/* WORKSPACE MEMBERS — one-click DMs, no search needed */}
-                  {workspaceMembers.length > 0 && (
-                    <div className="mt-3 pt-2 border-t border-[#E5E1EE]">
-                      <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-[#8E8EA0]">
-                        Workspace members
-                      </p>
+                  {/* All workspace members — mention-style rows, click to open a DM */}
+                  {dmListMembers.map((member) => {
+                    const memberOnline = isUserOnline(member)
 
-                      {workspaceMembers.map((member) => {
-                        const memberOnline = isUserOnline(member)
+                    return (
+                      <button
+                        key={member.id}
+                        onClick={() => void openDmWithMember(member)}
+                        disabled={startingDmId === member.id}
+                        className="w-full flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-all hover:bg-[#F5F2FF] disabled:opacity-60"
+                        title={`Message ${member.display_name}`}
+                      >
+                        <span className="relative h-7 w-7 shrink-0 rounded-full bg-[#EDE5FF] flex items-center justify-center text-xs font-semibold text-[#7C5CFC]">
+                          {member.avatar_url ? (
+                            <Image
+                              src={member.avatar_url}
+                              alt=""
+                              width={28}
+                              height={28}
+                              unoptimized
+                              className="h-7 w-7 rounded-full object-cover"
+                            />
+                          ) : (
+                            member.display_name[0]?.toUpperCase() || '?'
+                          )}
 
-                        return (
-                          <button
-                            key={member.id}
-                            onClick={() => void openDmWithMember(member)}
-                            disabled={startingDmId === member.id}
-                            className="w-full flex items-center gap-2 px-3 py-[6px] rounded-lg text-[14px] transition-all hover:bg-[#E0D6FF] text-left disabled:opacity-60"
-                            style={{ color: '#4A4860' }}
-                            title={`Message ${member.display_name}`}
-                          >
-                            <div className="relative shrink-0 w-5 h-5">
-                              {member.avatar_url ? (
-                                <Image
-                                  src={member.avatar_url}
-                                  alt=""
-                                  width={20}
-                                  height={20}
-                                  unoptimized
-                                  className="h-5 w-5 rounded-md object-cover"
-                                />
-                              ) : (
-                                <div
-                                  className="h-5 w-5 rounded-md flex items-center justify-center text-[9px] font-bold"
-                                  style={{
-                                    background: '#E0D6FF',
-                                    color: '#7C5CFC',
-                                  }}
-                                >
-                                  {member.display_name[0]?.toUpperCase() || '?'}
-                                </div>
-                              )}
-
-                              <Circle
-                                className={cn(
-                                  'absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5',
-                                  memberOnline
-                                    ? 'fill-green-500 text-green-500'
-                                    : 'fill-gray-300 text-gray-300'
-                                )}
-                                strokeWidth={3}
-                                stroke="#F0EBFF"
-                              />
-                            </div>
-
-                            <span className="truncate flex-1 text-left">
-                              {member.display_name}
-                            </span>
-
-                            {startingDmId === member.id && (
-                              <span className="text-[10px] text-[#8E8EA0] shrink-0">
-                                opening…
-                              </span>
+                          <Circle
+                            className={cn(
+                              'absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5',
+                              memberOnline
+                                ? 'fill-green-500 text-green-500'
+                                : 'fill-gray-300 text-gray-300'
                             )}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
+                            strokeWidth={3}
+                            stroke="#FFFFFF"
+                          />
+                        </span>
+
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium text-[#2D2B3D]">
+                            {member.display_name}
+                          </span>
+                          <span className="block truncate text-xs text-[#8E8EA0]">
+                            @{member.display_name}
+                          </span>
+                        </span>
+
+                        {startingDmId === member.id && (
+                          <span className="text-[10px] text-[#8E8EA0] shrink-0">
+                            opening…
+                          </span>
+                        )}
+                      </button>
+                    )
+                  })}
 
                 {dmChannels.filter(
                   (dm) =>
                     !hiddenDmIds.includes(dm.id)
-                ).length === 0 && (
+                ).length === 0 &&
+                  dmListMembers.length === 0 && (
                   <button
                     onClick={() =>
                       setDmDialogOpen(true)
