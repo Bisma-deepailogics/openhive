@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "description": "Open-source team messaging platform — Electron desktop app shell",
-  "author": "OpenHive",
+  "author": {
+    "name": "OpenHive",
+    "email": "bisma.haseeb@deepailogics.com"
+  },
   "main": "electron/main.js",
   "scripts": {
     "dev": "next dev",
@@ -62,7 +65,8 @@
     "productName": "OpenHive",
 
     "directories": {
-      "output": "dist-electron"
+      "output": "dist-electron",
+      "buildResources": "electron/build"
     },
 
     "files": [
@@ -119,14 +123,18 @@
 
     "mac": {
       "target": [
-        "dmg"
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
       ],
       "category": "public.app-category.social-networking"
     },
 
     "linux": {
       "target": [
-        "AppImage"
+        "AppImage",
+        "deb"
       ],
       "category": "Network"
     }

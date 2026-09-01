@@ -1,0 +1,93 @@
+name: Build OpenHive Desktop
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-latest
+          - ubuntu-latest
+          - macos-latest
+
+    runs-on: ${{ matrix.os }}
+
+    env:
+      # No code-signing certificate in CI — skip the macOS identity lookup.
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Electron app
+        run: npm run electron:build -- --publish never
+
+      - name: Upload Windows artifacts
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenHive-Windows
+          path: dist-electron/*.exe
+          if-no-files-found: error
+
+      - name: Upload Linux artifacts
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenHive-Linux
+          path: |
+            dist-electron/*.AppImage
+            dist-electron/*.deb
+          if-no-files-found: error
+
+      - name: Upload macOS artifacts
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenHive-macOS
+          path: dist-electron/*.dmg
+          if-no-files-found: error
+
+  # Publishes every installer to a GitHub Release when a v* tag is pushed,
+  # so Windows, Linux and macOS users can download the app in one place.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-release
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist-release/**/*.exe
+            dist-release/**/*.AppImage
+            dist-release/**/*.deb
+            dist-release/**/*.dmg
+          generate_release_notes: true

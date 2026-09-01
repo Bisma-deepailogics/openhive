@@ -7,7 +7,8 @@
  *
  *   npm run electron:dev     → `next dev` on a free port (hot reload)
  *   npm run electron:preview → `.next/standalone/server.js` (production build)
- *   npm run electron:build   → Windows installer via electron-builder
+ *   npm run electron:build   → platform installers via electron-builder
+ *                              (NSIS exe / AppImage + deb / dmg)
  *
  * Set `OPENHIVE_URL=http://localhost:3000` to attach to an already-running
  * server instead of spawning a new one.
@@ -294,6 +295,18 @@ function registerPermissions() {
   });
 }
 
+/** Start the Next server (unless OPENHIVE_URL is set) and open the window. */
+function launchApp() {
+  (async () => {
+    const url = process.env.OPENHIVE_URL || (await startServer());
+    createWindow(url);
+  })().catch((err) => {
+    const tail = lastServerOutput.trim().slice(-1200);
+    dialog.showErrorBox(APP_NAME, `${String((err && err.message) || err)}\n\n${tail}`);
+    app.quit();
+  });
+}
+
 /* --------------------------------- lifecycle -------------------------------- */
 
 if (!app.requestSingleInstanceLock()) {
@@ -306,16 +319,21 @@ if (!app.requestSingleInstanceLock()) {
     }
   });
 
-  app.whenReady().then(async () => {
+  app.whenReady().then(() => {
     registerPermissions();
-    try {
-      const url = process.env.OPENHIVE_URL || (await startServer());
-      createWindow(url);
-    } catch (err) {
-      const tail = lastServerOutput.trim().slice(-1200);
-      dialog.showErrorBox(APP_NAME, `${String((err && err.message) || err)}\n\n${tail}`);
-      app.quit();
+    launchApp();
+  });
+
+  // macOS keeps the app running after the last window closes; clicking the
+  // dock icon must bring the window back (re-using the already-running server).
+  app.on("activate", () => {
+    if (process.platform !== "darwin") return;
+    if (mainWindow) {
+      mainWindow.show();
+      return;
     }
+    // If the server is still starting, createWindow() runs when it resolves.
+    if (appOrigin) createWindow(appOrigin);
   });
 
   app.on("window-all-closed", () => {
