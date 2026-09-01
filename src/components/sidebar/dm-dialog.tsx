@@ -5,9 +5,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { getSupabaseClient } from '@/lib/supabase/client'
+import { findOrCreateDmChannel } from '@/lib/dm'
 import { useAppStore } from '@/lib/store/app-store'
 import { Circle, Search, X, Users, Check } from 'lucide-react'
-import type { Profile, Channel } from '@/types/database'
+import type { Profile } from '@/types/database'
 
 interface DmDialogProps {
   open: boolean
@@ -15,7 +16,10 @@ interface DmDialogProps {
 }
 
 export function DmDialog({ open, onOpenChange }: DmDialogProps) {
-  const { user, workspace, setCurrentChannelId, addDmChannel, unhideDm, dmChannels, hiddenDmIds } = useAppStore()
+  const { user, workspace, setCurrentChannelId, addDmChannel, unhideDm, hiddenDmIds, onlineProfileIds, seedOnlineProfiles } = useAppStore()
+
+  const isProfileOnline = (profile: Profile) =>
+    profile.is_online === true || onlineProfileIds.has(profile.id)
   const [members, setMembers] = useState<Profile[]>([])
   const [selectedMembers, setSelectedMembers] = useState<Profile[]>([])
   const [search, setSearch] = useState('')
@@ -38,6 +42,7 @@ export function DmDialog({ open, onOpenChange }: DmDialogProps) {
             .map((d: Record<string, unknown>) => d.profile as Profile)
             .filter((p) => p && p.id !== user?.id)
           setMembers(profiles)
+          seedOnlineProfiles(profiles)
         }
       })
   }, [open, workspace, user])
@@ -64,41 +69,10 @@ export function DmDialog({ open, onOpenChange }: DmDialogProps) {
     setLoading(true)
 
     try {
-      const ids = [user.id, otherUser.id].sort()
-      const dmName = `dm-${ids[0].slice(0, 8)}-${ids[1].slice(0, 8)}`
+      const channelId = await findOrCreateDmChannel(client, workspace.id, user, otherUser)
 
-      const { data: existing } = await client
-        .from('channels')
-        .select('*')
-        .eq('workspace_id', workspace.id)
-        .eq('name', dmName)
-        .limit(1)
-
-      let channelId: string
-
-      if (existing && existing.length > 0) {
-        channelId = existing[0].id
-        if (hiddenDmIds.includes(channelId)) {
-          unhideDm(channelId)
-        }
-      } else {
-        const id = crypto.randomUUID()
-        const { error } = await client.from('channels').insert({
-          id,
-          workspace_id: workspace.id,
-          name: dmName,
-          description: `Direct message between ${user.display_name} and ${otherUser.display_name}`,
-          is_private: true,
-          created_by: user.id,
-        })
-        if (error) throw error
-
-        const { error: memberError } = await client.from('channel_members').insert([
-          { channel_id: id, profile_id: user.id, role: 'admin' },
-          { channel_id: id, profile_id: otherUser.id, role: 'admin' },
-        ])
-        if (memberError) throw memberError
-        channelId = id
+      if (hiddenDmIds.includes(channelId)) {
+        unhideDm(channelId)
       }
 
       const { data: channelData } = await client
@@ -248,7 +222,7 @@ export function DmDialog({ open, onOpenChange }: DmDialogProps) {
                     </div>
                     <Circle
                       className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 ${
-                        member.is_online
+                        isProfileOnline(member)
                           ? 'fill-green-500 text-green-500'
                           : 'fill-muted-foreground/30 text-muted-foreground/30'
                       }`}

@@ -38,13 +38,6 @@ export function ThreadPanel() {
   const bottomRef =
     useRef<HTMLDivElement>(null)
 
-  const repliesRef =
-    useRef<Message[]>([])
-
-  useEffect(() => {
-    repliesRef.current = replies
-  }, [replies])
-
   const scrollToBottom =
     useCallback(() => {
       setTimeout(() => {
@@ -55,12 +48,7 @@ export function ThreadPanel() {
     }, [])
 
   /*
-   * IMPORTANT:
-   * MessageBubble dispatches this event after
-   * successfully deleting a message.
-   *
-   * This makes the thread UI update immediately,
-   * without waiting for Supabase realtime.
+   * Message deleted event
    */
   useEffect(() => {
     function handleMessageDeleted(
@@ -99,81 +87,93 @@ export function ThreadPanel() {
   }, [])
 
   /*
-   * Load thread replies + realtime updates
+   * Report the live reply count (deleted replies are excluded) so the
+   * channel list's "N replies" indicator on the parent stays accurate
+   * even after replies are deleted.
+   */
+  useEffect(() => {
+    if (!threadParentMessage) return
+
+    const count = replies.filter(
+      (reply) => !reply.is_deleted
+    ).length
+
+    window.dispatchEvent(
+      new CustomEvent('thread-reply-count', {
+        detail: {
+          parentId: threadParentMessage.id,
+          count,
+        },
+      })
+    )
+  }, [replies, threadParentMessage])
+
+  /*
+   * Load thread replies + realtime
    */
   useEffect(() => {
     if (!threadParentMessage) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting panel state when the thread closes
       setReplies([])
+      setLoading(false)
       return
     }
 
+    /*
+     * Keep a stable reference to the parent message.
+     */
+    const parentMessage =
+      threadParentMessage
+
+    /*
+     * Get Supabase client once.
+     */
     const client =
       getSupabaseClient()
 
-    if (!client) return
+    /*
+     * getSupabaseClient() can return null.
+     * Check it BEFORE using it anywhere below.
+     */
+    if (!client) {
+      console.error(
+        'Supabase client is not available'
+      )
+
+      setReplies([])
+      setLoading(false)
+
+      return
+    }
 
     let cancelled = false
 
-    async function loadReplies() {
-      setLoading(true)
-
-      const { data, error } =
-        await client!
-          .from('messages')
-          .select(
-            '*, sender:profiles(*)'
-          )
-          .eq(
-            'parent_id',
-            threadParentMessage!.id
-          )
-          .eq(
-            'is_deleted',
-            false
-          )
-          .order(
-            'created_at',
-            {
-              ascending: true,
-            }
-          )
-
-      if (
-        !cancelled &&
-        !error &&
-        data
-      ) {
-        setReplies(
-          data as Message[]
-        )
-
-        scrollToBottom()
-      }
-
-      if (!cancelled) {
-        setLoading(false)
-      }
-    }
-
-    loadReplies()
-
     /*
-     * Fetch a single reply with sender profile
+     * Fetch a single reply.
+     *
+     * IMPORTANT:
+     * The client is passed into this function
+     * after it has already been checked.
      */
     async function fetchReply(
+      supabaseClient: NonNullable<
+        ReturnType<typeof getSupabaseClient>
+      >,
       messageId: string
-    ) {
-      const { data, error } =
-        await client!
-          .from('messages')
-          .select(
-            '*, sender:profiles(*)'
-          )
-          .eq(
-            'id',
-            messageId
-          )
-          .single()
+    ): Promise<Message | null> {
+      const {
+        data,
+        error,
+      } = await supabaseClient
+        .from('messages')
+        .select(
+          '*, sender:profiles(*)'
+        )
+        .eq(
+          'id',
+          messageId
+        )
+        .single()
 
       if (error) {
         console.error(
@@ -184,24 +184,84 @@ export function ThreadPanel() {
         return null
       }
 
-      return data as Message | null
+      return data as Message
     }
 
     /*
-     * Supabase Realtime
+     * Load all replies
+     */
+    async function loadReplies() {
+      if (cancelled) return
+
+      setLoading(true)
+
+      const {
+        data,
+        error,
+      } = await client
+        .from('messages')
+        .select(
+          '*, sender:profiles(*)'
+        )
+        .eq(
+          'parent_id',
+          parentMessage.id
+        )
+        .eq(
+          'is_deleted',
+          false
+        )
+        .order(
+          'created_at',
+          {
+            ascending: true,
+          }
+        )
+
+      if (cancelled) return
+
+      if (error) {
+        console.error(
+          'Failed to load thread replies:',
+          error
+        )
+
+        setReplies([])
+        setLoading(false)
+
+        return
+      }
+
+      setReplies(
+        (data ?? []) as Message[]
+      )
+
+      setLoading(false)
+
+      scrollToBottom()
+    }
+
+    loadReplies()
+
+    /*
+     * Supabase Realtime channel
      */
     const channel =
       client.channel(
-        `thread:${threadParentMessage.id}`
+        `thread:${parentMessage.id}`
       )
 
+    /*
+     * INSERT
+     */
     channel.on(
       'postgres_changes',
       {
         event: 'INSERT',
         schema: 'public',
         table: 'messages',
-        filter: `parent_id=eq.${threadParentMessage.id}`,
+        filter:
+          `parent_id=eq.${parentMessage.id}`,
       },
       async (payload) => {
         if (cancelled) return
@@ -219,38 +279,54 @@ export function ThreadPanel() {
           return
         }
 
-        const data =
+        const newReply =
           await fetchReply(
+            client,
             newMessage.id
           )
 
-        if (!data || cancelled)
+        if (
+          !newReply ||
+          cancelled
+        ) {
           return
+        }
 
         setReplies((prev) => {
+          /*
+           * Prevent duplicate realtime messages.
+           */
           if (
             prev.some(
-              (m) =>
-                m.id === data.id
+              (message) =>
+                message.id ===
+                newReply.id
             )
           ) {
             return prev
           }
 
-          return [...prev, data]
+          return [
+            ...prev,
+            newReply,
+          ]
         })
 
         scrollToBottom()
       }
     )
 
+    /*
+     * UPDATE
+     */
     channel.on(
       'postgres_changes',
       {
         event: 'UPDATE',
         schema: 'public',
         table: 'messages',
-        filter: `parent_id=eq.${threadParentMessage.id}`,
+        filter:
+          `parent_id=eq.${parentMessage.id}`,
       },
       async (payload) => {
         if (cancelled) return
@@ -261,12 +337,14 @@ export function ThreadPanel() {
             is_deleted?: boolean
           }
 
-        if (!updatedMessage.id)
+        if (
+          !updatedMessage.id
+        ) {
           return
+        }
 
         /*
-         * Soft delete:
-         * remove it from the thread immediately.
+         * Soft delete
          */
         if (
           updatedMessage.is_deleted
@@ -285,31 +363,42 @@ export function ThreadPanel() {
         /*
          * Normal update/edit
          */
-        const updated =
+        const updatedReply =
           await fetchReply(
+            client,
             updatedMessage.id
           )
 
-        if (!updated || cancelled)
+        if (
+          !updatedReply ||
+          cancelled
+        ) {
           return
+        }
 
         setReplies((prev) =>
-          prev.map((message) =>
-            message.id === updated.id
-              ? updated
-              : message
+          prev.map(
+            (message) =>
+              message.id ===
+              updatedReply.id
+                ? updatedReply
+                : message
           )
         )
       }
     )
 
+    /*
+     * DELETE
+     */
     channel.on(
       'postgres_changes',
       {
         event: 'DELETE',
         schema: 'public',
         table: 'messages',
-        filter: `parent_id=eq.${threadParentMessage.id}`,
+        filter:
+          `parent_id=eq.${parentMessage.id}`,
       },
       (payload) => {
         if (cancelled) return
@@ -319,8 +408,11 @@ export function ThreadPanel() {
             id?: string
           }
 
-        if (!deletedMessage.id)
+        if (
+          !deletedMessage.id
+        ) {
           return
+        }
 
         setReplies((prev) =>
           prev.filter(
@@ -332,14 +424,23 @@ export function ThreadPanel() {
       }
     )
 
-    channel.subscribe((status) => {
-      console.log(
-        `Thread realtime status: ${status}`
-      )
-    })
+    /*
+     * Subscribe
+     */
+    channel.subscribe(
+      (status) => {
+        console.log(
+          `Thread realtime status: ${status}`
+        )
+      }
+    )
 
+    /*
+     * Cleanup
+     */
     return () => {
       cancelled = true
+
       client.removeChannel(
         channel
       )
@@ -349,9 +450,14 @@ export function ThreadPanel() {
     scrollToBottom,
   ])
 
-  if (!threadParentMessage)
+  if (!threadParentMessage) {
     return null
+  }
 
+  /*
+   * Build message content
+   * with attachment links.
+   */
   function buildMessageContent(
     content: string,
     attachments?: string[]
@@ -367,9 +473,7 @@ export function ThreadPanel() {
       attachments.map(
         (attachment) => {
           const splitIndex =
-            attachment.indexOf(
-              '|'
-            )
+            attachment.indexOf('|')
 
           const hasEmbeddedName =
             splitIndex > 0
@@ -398,11 +502,12 @@ export function ThreadPanel() {
                 'attachment'
             )
 
-          const fileName = rawName
-            ? decodeURIComponent(
-                rawName
-              )
-            : fallbackName
+          const fileName =
+            rawName
+              ? decodeURIComponent(
+                  rawName
+                )
+              : fallbackName
 
           return `📎 [${fileName}](${url})`
         }
@@ -418,6 +523,9 @@ export function ThreadPanel() {
       : attachmentLines.join('\n')
   }
 
+  /*
+   * Send thread reply
+   */
   async function handleSendReply(
     content: string,
     attachments?: string[]
@@ -425,6 +533,10 @@ export function ThreadPanel() {
     const client =
       getSupabaseClient()
 
+    /*
+     * Check all required values
+     * before using them.
+     */
     if (
       !client ||
       !user ||
@@ -439,17 +551,20 @@ export function ThreadPanel() {
         attachments
       )
 
-    const { error } =
-      await client
-        .from('messages')
-        .insert({
-          channel_id:
-            threadParentMessage.channel_id,
-          sender_id: user.id,
-          content: finalContent,
-          parent_id:
-            threadParentMessage.id,
-        })
+    const {
+      error,
+    } = await client
+      .from('messages')
+      .insert({
+        channel_id:
+          threadParentMessage.channel_id,
+        sender_id:
+          user.id,
+        content:
+          finalContent,
+        parent_id:
+          threadParentMessage.id,
+      })
 
     if (error) {
       console.error(
@@ -461,7 +576,7 @@ export function ThreadPanel() {
 
   return (
     <div
-      className="w-96 flex flex-col h-full"
+      className="w-96 min-w-0 flex flex-col h-full overflow-hidden"
       style={{
         background: '#ffffff',
         borderLeft:
@@ -535,7 +650,7 @@ export function ThreadPanel() {
       </div>
 
       {/* REPLIES */}
-      <div className="flex-1 overflow-y-auto px-4">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-4">
         <div className="py-2 space-y-1">
           {loading ? (
             <div className="flex items-center justify-center py-8">
@@ -546,8 +661,7 @@ export function ThreadPanel() {
                 }}
               />
             </div>
-          ) : replies.length ===
-            0 ? (
+          ) : replies.length === 0 ? (
             <div
               className="flex items-center justify-center py-10 text-sm"
               style={{
@@ -558,7 +672,10 @@ export function ThreadPanel() {
             </div>
           ) : (
             replies.map(
-              (reply, i) => {
+              (
+                reply,
+                i
+              ) => {
                 const prev =
                   i > 0
                     ? replies[i - 1]
@@ -574,9 +691,7 @@ export function ThreadPanel() {
                     new Date(
                       prev.created_at
                     ).getTime() >
-                    5 *
-                      60 *
-                      1000
+                    5 * 60 * 1000
 
                 return (
                   <MessageBubble

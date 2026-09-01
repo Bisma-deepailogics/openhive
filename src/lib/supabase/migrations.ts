@@ -512,25 +512,27 @@ export const migrations: string[] = [
     AFTER INSERT ON auth.users
     FOR EACH ROW EXECUTE FUNCTION handle_new_user();
 
-  -- Trigger: update thread reply count
+  -- Trigger: update thread reply count (deleted replies are never counted)
   CREATE OR REPLACE FUNCTION update_thread_reply_count()
   RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
   AS $fn$
+  DECLARE
+    target_id uuid := COALESCE(NEW.parent_id, OLD.parent_id);
   BEGIN
-    IF NEW.parent_id IS NOT NULL THEN
+    IF target_id IS NOT NULL THEN
       UPDATE messages SET thread_reply_count = (
-        SELECT count(*) FROM messages WHERE parent_id = NEW.parent_id
-      ) WHERE id = NEW.parent_id;
+        SELECT count(*) FROM messages
+        WHERE parent_id = target_id AND is_deleted = false
+      ) WHERE id = target_id;
     END IF;
-    RETURN NEW;
+    RETURN COALESCE(NEW, OLD);
   END;
   $fn$;
 
   DROP TRIGGER IF EXISTS on_message_reply ON messages;
   CREATE TRIGGER on_message_reply
-    AFTER INSERT ON messages
+    AFTER INSERT OR UPDATE OF parent_id, is_deleted OR DELETE ON messages
     FOR EACH ROW
-    WHEN (NEW.parent_id IS NOT NULL)
     EXECUTE FUNCTION update_thread_reply_count();`,
 
   // Realtime Setup

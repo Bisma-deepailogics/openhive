@@ -6,7 +6,7 @@ import { useAppStore } from '@/lib/store/app-store'
 import type { Message } from '@/types/database'
 
 export function useNotifications() {
-  const { user, workspace, currentChannelId } = useAppStore()
+  const { user, workspace } = useAppStore()
   const permissionRef = useRef<NotificationPermission>('default')
 
   function notificationsPaused(): boolean {
@@ -158,7 +158,10 @@ export function useNotifications() {
     return () => {
       sub.unsubscribe()
     }
-  }, [user, workspace, currentChannelId])
+    // NOTE: currentChannelId is read via getState() inside the handler, so we
+    // must NOT resubscribe on every channel switch — that resubscribe churn is
+    // what made notifications arrive late or get dropped entirely.
+  }, [user, workspace])
 
   function sendBrowserNotification(
     msg: { content: string; sender_id: string; channel_id: string },
@@ -169,8 +172,9 @@ export function useNotifications() {
     if (permissionRef.current !== 'granted') return
     if (typeof window === 'undefined' || !('Notification' in window)) return
 
-    // Don't send if window is focused
-    if (document.hasFocus()) return
+    // NOTE: we intentionally do NOT skip when the window is focused —
+    // in the desktop app the window is almost always focused, so that
+    // check silently swallowed every notification.
 
     const title = isDm
       ? `${senderName || 'Someone'} sent you a message`
