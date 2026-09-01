@@ -9,8 +9,8 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: 'OpenHive',
-  description: 'Open-source team communication platform',
+  title: 'Orbit',
+  description: 'DeepAI Logics Team Communication',
 }
 
 export default function RootLayout({
@@ -20,7 +20,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${inter.variable} antialiased`} style={{ fontFamily: 'var(--font-sans), system-ui, sans-serif' }}>{children}</body>
+      <body
+        className={`${inter.variable} antialiased`}
+        style={{ fontFamily: 'var(--font-sans), system-ui, sans-serif' }}
+      >
+        {children}
+      </body>
     </html>
   )
 }

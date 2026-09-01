@@ -396,7 +396,7 @@ function AuthForm() {
     const text = raw.trim()
     if (!text) return null
 
-    // openhive://join?workspace=<id> or any http(s) …/auth?workspace=<id>
+    // orbit://join?workspace=<id> or any http(s) …/auth?workspace=<id>
     try {
       const ws = new URL(text).searchParams.get('workspace')
       if (ws) return ws
@@ -770,7 +770,7 @@ function AuthForm() {
       <Card className="max-w-sm w-full">
         <CardHeader className="text-center">
           <MessageSquare className="mx-auto h-10 w-10 text-primary mb-2" />
-          <CardTitle className="text-2xl">OpenHive</CardTitle>
+          <CardTitle className="text-2xl">Orbit</CardTitle>
         </CardHeader>
         <CardContent>
           {inviteBanner}
@@ -784,7 +784,7 @@ function AuthForm() {
               <div className="flex gap-2">
                 <Input
                   id="paste-invite"
-                  placeholder="openhive://join?workspace=… or any invite link"
+                  placeholder="orbit://join?workspace=… or any invite link"
                   value={pasteLink}
                   onChange={(e) => {
                     setPasteLink(e.target.value)

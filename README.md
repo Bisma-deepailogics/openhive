@@ -6,11 +6,11 @@
   <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="MIT License" />
 </p>
 
-# OpenHive
+# Orbit
 
 **Open-source team messaging platform** — a real-time team messaging app anyone can self-host in minutes.
 
-OpenHive is a community-driven project built with Next.js and Supabase. The goal: build a full-featured, beautiful team communication platform that's **100% open-source** and easy to deploy. No vendor lock-in, no hidden costs — bring your own Supabase instance and you're good to go.
+Orbit is a community-driven project built with Next.js and Supabase. The goal: build a full-featured, beautiful team communication platform that's **100% open-source** and easy to deploy. No vendor lock-in, no hidden costs — bring your own Supabase instance and you're good to go.
 
 > 🚀 **[Try the live demo →](https://www.openhivedemo.com/auth?workspace=022469cb-2e23-4fe4-a462-5da6d55905cd)**
 
@@ -217,9 +217,9 @@ Video/audio calls are powered by [LiveKit](https://livekit.io), an open-source W
 1. Follow the [LiveKit self-hosting guide](https://docs.livekit.io/home/self-hosting/local/)
 2. Use your self-hosted server URL and generated API credentials
 
-### Enable calls in OpenHive
+### Enable calls in Orbit
 
-1. Open your workspace in OpenHive
+1. Open your workspace in Orbit
 2. Click the workspace name (top-left) > **Workspace Settings**
 3. Scroll to **Video Calls (LiveKit)**
 4. Enter your LiveKit **Server URL**, **API Key**, and **API Secret**
@@ -279,7 +279,7 @@ src/
 
 ## Database Schema
 
-OpenHive auto-provisions **23+ tables** with full RLS (Row Level Security):
+Orbit auto-provisions **23+ tables** with full RLS (Row Level Security):
 
 **Core:**
 `profiles` · `workspaces` · `workspace_members` · `channels` · `channel_members` · `messages` · `reactions` · `file_attachments` · `pins` · `read_receipts`
@@ -301,7 +301,7 @@ All migrations are in `src/lib/supabase/migrations.ts` — the setup wizard runs
 
 ### Vercel (recommended)
 
-You can deploy OpenHive to Vercel in two ways:
+You can deploy Orbit to Vercel in two ways:
 
 #### Option A: Provision first, then deploy
 
@@ -349,7 +349,7 @@ Supabase's built-in email service has strict rate limits (3–4 emails/hour on t
 
 ### Other platforms
 
-OpenHive runs anywhere Node.js runs — Railway, Fly.io, Docker, AWS, etc.
+Orbit runs anywhere Node.js runs — Railway, Fly.io, Docker, AWS, etc.
 
 1. Deploy the app
 2. Open the deployed URL → complete the setup wizard to provision the database
@@ -362,7 +362,7 @@ Or provision locally first, then set the env vars and run `npm run build && npm 
 
 ## Contributing
 
-**OpenHive is a community project — we want as many contributors as possible!**
+**Orbit is a community project — we want as many contributors as possible!**
 
 Whether you're fixing a typo, adding a feature, or improving the docs — every contribution matters. Here's how to get involved:
 
@@ -426,7 +426,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 ## License
 
-OpenHive is open-source software licensed under the [MIT License](LICENSE).
+Orbit is open-source software licensed under the [MIT License](LICENSE).
 
 ---
 

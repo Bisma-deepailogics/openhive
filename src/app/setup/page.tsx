@@ -170,7 +170,7 @@ export default function SetupPage() {
         <div className="max-w-lg w-full space-y-8 text-center">
           <div className="space-y-4">
             <MessageSquare className="mx-auto h-16 w-16 text-primary" />
-            <h1 className="text-4xl font-bold tracking-tight">Welcome to OpenHive</h1>
+            <h1 className="text-4xl font-bold tracking-tight">Welcome to Orbit</h1>
             <p className="text-lg text-muted-foreground">
               The open-source team communication platform
             </p>
@@ -195,7 +195,7 @@ export default function SetupPage() {
             <Server className="mx-auto h-12 w-12 text-green-500 mb-2" />
             <CardTitle>Connect your Supabase project</CardTitle>
             <CardDescription>
-              OpenHive will automatically create all 23 tables, security policies, triggers, and
+              Orbit will automatically create all 23 tables, security policies, triggers, and
               realtime config.
             </CardDescription>
           </CardHeader>

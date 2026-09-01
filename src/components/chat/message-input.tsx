@@ -653,7 +653,7 @@ export function MessageInput({
     if (recordingType || uploading || sending) return
 
     if (typeof window !== 'undefined' && !window.isSecureContext) {
-      alert('Microphone and camera access require a secure connection. Open OpenHive using https:// or http://localhost, then try again.')
+      alert('Microphone and camera access require a secure connection. Open Orbit using https:// or http://localhost, then try again.')
       return
     }
 

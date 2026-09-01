@@ -138,14 +138,14 @@ export async function configureSiteUrl(
   onProgress('Configuring Supabase Auth Site URL...')
 
   // Build redirect URLs: the current site URL + localhost for dev + the
-  // openhive:// deep link, so invite emails can open the recipient's
+  // orbit:// deep link, so invite emails can open the recipient's
   // installed desktop app instead of a localhost URL that only exists on
   // the sender's machine.
   const redirectUrls = [siteUrl]
   if (!siteUrl.includes('localhost')) {
     redirectUrls.push('http://localhost:3000')
   }
-  redirectUrls.push('openhive://join*')
+  redirectUrls.push('orbit://join*')
 
   try {
     const response = await fetch('/api/provision', {

@@ -198,19 +198,19 @@ export async function POST(request: NextRequest) {
     // origin (http://127.0.0.1:<port>) only exists on the sender's computer,
     // so prefer, in order:
     //   1. NEXT_PUBLIC_APP_URL — a shared deployment URL (e.g. Vercel)
-    //   2. openhive:// deep link — opens the recipient's installed app
+    //   2. orbit:// deep link — opens the recipient's installed app
     //      (allowlisted during setup, see provisioner.configureSiteUrl)
     // and fall back to this server's origin if Supabase rejects the deep link.
     const emailParams = `workspace=${workspaceId}&email=${encodeURIComponent(email)}`
     const appUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, '')
     const primaryRedirectTo = appUrl
       ? `${appUrl}/auth?${emailParams}`
-      : `openhive://join?${emailParams}`
+      : `orbit://join?${emailParams}`
     const fallbackRedirectTo = `${request.nextUrl.origin}/auth?${emailParams}`
 
     const inviteData = {
       workspace_id: workspaceId,
-      workspace_name: workspaceName || 'OpenHive',
+      workspace_name: workspaceName || 'Orbit',
       display_name: email.split('@')[0],
     }
 

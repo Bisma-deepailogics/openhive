@@ -1,4 +1,4 @@
-// Types for all 23 OpenHive database tables
+// Types for all 23 Orbit database tables
 
 export interface Profile {
   id: string

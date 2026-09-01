@@ -770,7 +770,7 @@ const presenceSub = client
                 color: '#2D2B3D',
               }}
             >
-              {workspace?.name || 'OpenHive'}
+              {workspace?.name || 'Orbit'}
             </span>
           </button>
 

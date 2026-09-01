@@ -1,4 +1,4 @@
-name: Build OpenHive desktop installers
+name: Build Orbit desktop installers
 
 on:
   workflow_dispatch:
@@ -14,11 +14,11 @@ jobs:
         include:
           - os: macos-latest
             command: npm run electron:build:mac
-            artifact: OpenHive-macOS
+            artifact: Orbit-macOS
             files: dist-electron/*.dmg
           - os: windows-latest
             command: npm run electron:build:win
-            artifact: OpenHive-Windows
+            artifact: Orbit-Windows
             files: dist-electron/*.exe
     runs-on: ${{ matrix.os }}
     env:

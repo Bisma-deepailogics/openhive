@@ -1,6 +1,6 @@
-# Contributing to OpenHive
+# Contributing to Orbit
 
-First off, thank you for considering contributing to OpenHive! Every contribution helps make this project better for everyone.
+First off, thank you for considering contributing to Orbit! Every contribution helps make this project better for everyone.
 
 ## Table of Contents
 
@@ -14,7 +14,7 @@ First off, thank you for considering contributing to OpenHive! Every contributio
 
 ## Code of Conduct
 
-By participating in this project, you agree to be respectful and constructive. We want OpenHive to be a welcoming community for everyone.
+By participating in this project, you agree to be respectful and constructive. We want Orbit to be a welcoming community for everyone.
 
 - Be kind and courteous
 - Respect differing viewpoints
@@ -165,4 +165,4 @@ src/
 
 ---
 
-Thank you for contributing to OpenHive!
+Thank you for contributing to Orbit!

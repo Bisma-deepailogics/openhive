@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { app, BrowserWindow, dialog, session, shell } = require("electron");
 
-const APP_NAME = "OpenHive";
-const APP_URL = process.env.OPENHIVE_URL || "https://www.openhivedemo.com";
+const APP_NAME = "Orbit";
+const APP_URL = process.env.ORBIT_URL || "https://www.openhivedemo.com";
 const APP_ORIGIN = new URL(APP_URL).origin;
-const PROTOCOL = "openhive";
+const PROTOCOLS = ["orbit"];
 
 let mainWindow = null;
 let pendingDeepLink = null;
@@ -12,7 +12,7 @@ let pendingDeepLink = null;
 function routeDeepLink(value) {
   try {
     const url = new URL(value);
-    if (url.protocol === `${PROTOCOL}:`) {
+    if (PROTOCOLS.includes(url.protocol.replace(":", ""))) {
       const workspace = url.searchParams.get("workspace");
       return workspace ? `/auth?workspace=${encodeURIComponent(workspace)}` : "/";
     }
@@ -90,7 +90,7 @@ function createWindow() {
     dialog.showMessageBox(mainWindow, {
       type: "error",
       title: `${APP_NAME} could not connect`,
-      message: "OpenHive could not connect to the company server.",
+      message: "Orbit could not connect to the company server.",
       detail: `${description}\n\n${url}\n\nCheck your internet connection and try again.`,
       buttons: ["Retry", "Close"],
       defaultId: 0,
@@ -122,11 +122,17 @@ function registerPermissions() {
 }
 
 function registerProtocol() {
-  if (process.defaultApp && process.argv.length >= 2) {
-    app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [process.argv[1]]);
-  } else {
-    app.setAsDefaultProtocolClient(PROTOCOL);
+  for (const protocol of PROTOCOLS) {
+    if (process.defaultApp && process.argv.length >= 2) {
+      app.setAsDefaultProtocolClient(protocol, process.execPath, [process.argv[1]]);
+    } else {
+      app.setAsDefaultProtocolClient(protocol);
+    }
   }
+}
+
+function findDeepLink(argv) {
+  return argv.find((arg) => PROTOCOLS.some((protocol) => arg.startsWith(`${protocol}://`)));
 }
 
 if (!app.requestSingleInstanceLock()) {
@@ -135,7 +141,7 @@ if (!app.requestSingleInstanceLock()) {
   registerProtocol();
 
   app.on("second-instance", (_event, argv) => {
-    const deepLink = argv.find((arg) => arg.startsWith(`${PROTOCOL}://`));
+    const deepLink = findDeepLink(argv);
     if (!deepLink || !openDeepLink(deepLink)) {
       if (mainWindow?.isMinimized()) mainWindow.restore();
       mainWindow?.show();
@@ -149,7 +155,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(() => {
-    const deepLink = process.argv.find((arg) => arg.startsWith(`${PROTOCOL}://`));
+    const deepLink = findDeepLink(process.argv);
     if (deepLink) pendingDeepLink = routeDeepLink(deepLink);
     registerPermissions();
     createWindow();

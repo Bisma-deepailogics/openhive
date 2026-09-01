@@ -1,10 +1,10 @@
 {
-  "name": "openhive",
+  "name": "orbit",
   "version": "0.1.0",
   "private": true,
   "description": "Open-source team messaging platform — Electron desktop app shell",
   "author": {
-    "name": "OpenHive",
+    "name": "Orbit",
     "email": "bisma.haseeb@deepailogics.com"
   },
   "main": "electron/main.js",
@@ -63,14 +63,14 @@
     "typescript": "^5"
   },
   "build": {
-    "appId": "com.deepailogics.openhive",
-    "productName": "OpenHive",
+    "appId": "com.deepailogics.orbit",
+    "productName": "Orbit",
     "asar": true,
     "protocols": [
       {
-        "name": "OpenHive",
+        "name": "Orbit",
         "schemes": [
-          "openhive"
+          "orbit"
         ]
       }
     ],
@@ -112,7 +112,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "OpenHive"
+      "shortcutName": "Orbit"
     }
   }
 }

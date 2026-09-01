@@ -39,7 +39,7 @@ export default function Home() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
       <MessageSquare className="h-12 w-12 text-primary" />
-      <h1 className="text-2xl font-bold">OpenHive</h1>
+      <h1 className="text-2xl font-bold">Orbit</h1>
       <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
     </div>
   )

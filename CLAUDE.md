@@ -1,4 +1,4 @@
-# OpenHive
+# Orbit
 
 Open-source team messaging platform — Next.js webapp with Supabase backend.
 

@@ -1,11 +1,11 @@
 {
-  "name": "openhive-desktop",
+  "name": "orbit-desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "OpenHive employee desktop app",
-  "author": "OpenHive",
+  "description": "Orbit employee desktop app",
+  "author": "Orbit",
   "main": "main.js",
   "dependencies": {
-    "openhive-shell-runtime": "file:runtime"
+    "orbit-shell-runtime": "file:runtime"
   }
 }
