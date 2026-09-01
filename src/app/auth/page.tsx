@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { MessageSquare, Loader2, Mail, Users, ArrowLeft, KeyRound } from 'lucide-react'
+import { MessageSquare, Loader2, Mail, Users, ArrowLeft, KeyRound, Link2 } from 'lucide-react'
 import { getSupabaseClient } from '@/lib/supabase/client'
 
 type Mode = 'signin' | 'signup'
@@ -36,6 +36,8 @@ function AuthForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [workspaceName, setWorkspaceName] = useState<string | null>(null)
+  const [pasteLink, setPasteLink] = useState('')
+  const [pasteError, setPasteError] = useState<string | null>(null)
   const isManualSubmit = useRef(false)
 
   // On mount: detect invite/recovery tokens in the URL hash, then show correct view
@@ -93,6 +95,21 @@ function AuthForm() {
     const hash = window.location.hash
     const hasHashTokens = hash.includes('access_token=') || hash.includes('type=invite')
 
+    // Already signed in on this machine and opened an invite link? Join the
+    // workspace directly (skip the form). Auth-token flows (invite email /
+    // PKCE code) are left to the handlers above so profile setup isn't skipped.
+    const urlParamsEarly = new URLSearchParams(window.location.search)
+    const hasAuthTokens = hasHashTokens || !!urlParamsEarly.get('code')
+    if (workspaceId && !hasAuthTokens) {
+      client.auth.getSession().then(({ data: { session } }) => {
+        if (session?.user && !isManualSubmit.current) {
+          autoJoinWorkspace(session.user.id).finally(() => {
+            router.replace('/workspace')
+          })
+        }
+      })
+    }
+
     // Manual fallback: if hash tokens exist but onAuthStateChange doesn't fire,
     // try to set the session explicitly from the hash fragment
     if (hasHashTokens && !code) {
@@ -118,6 +135,7 @@ function AuthForm() {
       subscription.unsubscribe()
       clearTimeout(timeout)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- autoJoinWorkspace only reads workspaceId; re-running once per workspaceId is intended
   }, [workspaceId, router])
 
   // Fetch workspace name for invite banner
@@ -371,6 +389,42 @@ function AuthForm() {
       setLoading(false)
       isManualSubmit.current = false
     }
+  }
+
+  // ---- Join via pasted invite link (shared from another computer) ----
+  function extractWorkspaceId(raw: string): string | null {
+    const text = raw.trim()
+    if (!text) return null
+
+    // openhive://join?workspace=<id> or any http(s) …/auth?workspace=<id>
+    try {
+      const ws = new URL(text).searchParams.get('workspace')
+      if (ws) return ws
+    } catch {
+      /* plain text, not a URL */
+    }
+
+    // "workspace=<id>" fragment somewhere in the pasted text
+    const match = text.match(/[?&]workspace=([A-Za-z0-9-]+)/)
+    if (match) return match[1]
+
+    // Bare workspace id
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text)) return text
+
+    return null
+  }
+
+  function handlePasteJoin(e: React.FormEvent) {
+    e.preventDefault()
+    const ws = extractWorkspaceId(pasteLink)
+    if (!ws) {
+      setPasteError('No workspace found in that text. Paste the full invite link you received.')
+      return
+    }
+    setPasteError(null)
+    setPasteLink('')
+    // Same page with the workspace param — the invite flow takes over.
+    router.replace(`/auth?workspace=${ws}`)
   }
 
   // ---- Error banner ----
@@ -720,6 +774,30 @@ function AuthForm() {
         </CardHeader>
         <CardContent>
           {inviteBanner}
+
+          {!workspaceId && (
+            <form onSubmit={handlePasteJoin} className="mb-4 space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <Link2 className="h-3 w-3" />
+                Have an invite link? Paste it to join a workspace
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  id="paste-invite"
+                  placeholder="openhive://join?workspace=… or any invite link"
+                  value={pasteLink}
+                  onChange={(e) => {
+                    setPasteLink(e.target.value)
+                    setPasteError(null)
+                  }}
+                />
+                <Button type="submit" variant="outline" className="shrink-0">
+                  Join
+                </Button>
+              </div>
+              {pasteError && <p className="text-xs text-destructive">{pasteError}</p>}
+            </form>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === 'signup' && (

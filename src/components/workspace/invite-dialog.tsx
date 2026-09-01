@@ -32,9 +32,11 @@ export function InviteDialog({ open, onOpenChange }: InviteDialogProps) {
   const [savingKey, setSavingKey] = useState(false)
   const [needsRestart, setNeedsRestart] = useState(false)
 
-  const inviteLink = typeof window !== 'undefined'
-    ? `${window.location.origin}/auth?workspace=${workspace?.id}`
-    : ''
+  // Portable invite link — intentionally does NOT contain this machine's
+  // origin (http://127.0.0.1:<port>), which only exists on this computer.
+  // The openhive:// deep link opens the recipient's installed OpenHive app,
+  // which then joins them via the shared Supabase backend.
+  const inviteLink = workspace?.id ? `openhive://join?workspace=${workspace.id}` : ''
 
   // Check if service key is configured
   useEffect(() => {
@@ -255,14 +257,20 @@ export function InviteDialog({ open, onOpenChange }: InviteDialogProps) {
             <div className="flex items-start gap-2 p-2.5 bg-blue-500/10 border border-blue-500/20 rounded-md">
               <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 shrink-0" />
               <p className="text-xs text-blue-600 dark:text-blue-400">
-                Make sure your <strong>Supabase Site URL</strong> is set to your production domain (not localhost).
-                Go to Supabase Dashboard → Authentication → URL Configuration.
+                The invite link below works on <strong>any computer</strong> with OpenHive installed —
+                it opens their app and joins them to this workspace. For <strong>email invites</strong>,
+                set <code className="bg-muted px-1 rounded">NEXT_PUBLIC_APP_URL</code> in your
+                <code className="bg-muted px-1 rounded"> .env.local</code> to a shared URL (e.g. your Vercel
+                deployment) so emailed links also work on other machines.
               </p>
             </div>
           </div>
 
           <div className="border-t pt-4 space-y-2">
             <Label>Or share invite link</Label>
+            <p className="text-xs text-muted-foreground">
+              Opens OpenHive on the other person&apos;s computer and joins them to this workspace.
+            </p>
             <div className="flex gap-2 min-w-0">
               <div className="flex-1 min-w-0 flex items-center gap-2 px-3 py-2 bg-muted rounded-md text-sm text-muted-foreground">
                 <Link2 className="h-4 w-4 shrink-0" />

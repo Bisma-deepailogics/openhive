@@ -23,6 +23,8 @@ const fs = require("fs");
 
 const APP_NAME = "OpenHive";
 const START_TIMEOUT_MS = 120000;
+/** Custom URL scheme for shareable invite links: openhive://join?workspace=<id>. */
+const DESKTOP_SCHEME = "openhive";
 
 let mainWindow = null;
 let serverProcess = null;
@@ -30,6 +32,8 @@ let appOrigin = null;
 let quitting = false;
 let logFileStream = null;
 let lastServerOutput = "";
+/** /auth?workspace=... path to open as soon as the window/server is ready. */
+let pendingDeepLinkPath = null;
 
 /* --------------------------------- helpers --------------------------------- */
 
@@ -272,14 +276,34 @@ function createWindow(url) {
   });
 
   mainWindow.once("ready-to-show", () => mainWindow.show());
-  mainWindow.loadURL(url);
+  // A deep link that arrived before the window existed opens right away.
+  const initialPath = pendingDeepLinkPath;
+  pendingDeepLinkPath = null;
+  mainWindow.loadURL(initialPath ? `${appOrigin}${initialPath}` : url);
 
-  // Same-origin popups stay inside the app; everything else (docs, mailto:,
-  // external links) opens in the default browser.
+  // Same-origin popups stay inside the app; shared invite links (any origin,
+  // or openhive://) are rewritten to the local server; everything else
+  // (docs, mailto:, external links) opens in the default browser.
   mainWindow.webContents.setWindowOpenHandler(({ url: target }) => {
     if (target.startsWith(appOrigin)) return { action: "allow" };
+    const invitePath = routeIncomingUrl(target);
+    if (invitePath) {
+      mainWindow.loadURL(`${appOrigin}${invitePath}`);
+      return { action: "deny" };
+    }
     shell.openExternal(target);
     return { action: "deny" };
+  });
+
+  // Non-popup navigations: same-origin is allowed; invite links from other
+  // machines (or openhive:// links) are rerouted to the local server; any
+  // other external URL goes to the system browser, not the app window.
+  mainWindow.webContents.on("will-navigate", (event, target) => {
+    if (target.startsWith(appOrigin)) return;
+    event.preventDefault();
+    const invitePath = routeIncomingUrl(target);
+    if (invitePath) mainWindow.loadURL(`${appOrigin}${invitePath}`);
+    else shell.openExternal(target);
   });
 
   mainWindow.on("closed", () => {
@@ -307,19 +331,114 @@ function launchApp() {
   });
 }
 
+/* --------------------------- deep links (invites) --------------------------- */
+
+/**
+ * Register the openhive:// scheme so shared invite links open the installed
+ * app on any machine. electron-builder also registers the scheme at install
+ * time via "build.protocols" (Windows registry, macOS Info.plist, .desktop).
+ */
+function registerDesktopProtocol() {
+  try {
+    if (process.defaultApp && process.argv.length >= 2) {
+      app.setAsDefaultProtocolClient(DESKTOP_SCHEME, process.execPath, [
+        path.resolve(process.argv[1]),
+      ]);
+    } else {
+      app.setAsDefaultProtocolClient(DESKTOP_SCHEME);
+    }
+  } catch {
+    /* already registered or unsupported */
+  }
+}
+
+/** openhive://join?workspace=<id> → workspace id, otherwise null. */
+function parseDeepLink(url) {
+  if (typeof url !== "string" || !url.startsWith(`${DESKTOP_SCHEME}://`)) return null;
+  try {
+    return new URL(url).searchParams.get("workspace") || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Rewrite a shared invite link to a path on THIS machine's local server.
+ * Every computer runs its own server, so an invite URL must never keep a
+ * foreign origin. Handles openhive:// links and any http(s) …/auth?workspace=
+ * URL (e.g. copied from another computer, or clicked inside a chat message).
+ */
+function routeIncomingUrl(target) {
+  const workspace = parseDeepLink(target);
+  if (workspace) return `/auth?workspace=${encodeURIComponent(workspace)}`;
+  try {
+    const u = new URL(target);
+    if (
+      (u.protocol === "http:" || u.protocol === "https:") &&
+      u.pathname.replace(/\/+$/, "") === "/auth" &&
+      u.searchParams.get("workspace")
+    ) {
+      const params = new URLSearchParams({ workspace: u.searchParams.get("workspace") });
+      const email = u.searchParams.get("email");
+      if (email) params.set("email", email);
+      return `/auth?${params.toString()}`;
+    }
+  } catch {
+    /* not a parseable URL */
+  }
+  return null;
+}
+
+/**
+ * Apply a deep link: navigate the window now when the server is ready,
+ * otherwise queue it — createWindow opens it as soon as everything is up.
+ */
+function applyDeepLink(url) {
+  const invitePath = routeIncomingUrl(url);
+  if (!invitePath) return false;
+  if (mainWindow && appOrigin) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.loadURL(`${appOrigin}${invitePath}`);
+  } else {
+    pendingDeepLinkPath = invitePath;
+    if (appOrigin) createWindow(appOrigin);
+  }
+  return true;
+}
+
 /* --------------------------------- lifecycle -------------------------------- */
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on("second-instance", () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
+  registerDesktopProtocol();
+
+  app.on("second-instance", (_event, argv) => {
+    // Windows/Linux protocol launches arrive here with the URL in argv.
+    const linkArg = (argv || []).find(
+      (a) => typeof a === "string" && a.startsWith(`${DESKTOP_SCHEME}://`),
+    );
+    if (!linkArg || !applyDeepLink(linkArg)) {
+      if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.focus();
+      }
     }
   });
 
+  // macOS protocol launches (app already running or cold start).
+  app.on("open-url", (event, url) => {
+    event.preventDefault();
+    applyDeepLink(url);
+  });
+
   app.whenReady().then(() => {
+    // Cold-start protocol launch on Windows/Linux: the URL is in argv.
+    const linkArg = process.argv.find(
+      (a) => typeof a === "string" && a.startsWith(`${DESKTOP_SCHEME}://`),
+    );
+    if (linkArg) applyDeepLink(linkArg);
     registerPermissions();
     launchApp();
   });

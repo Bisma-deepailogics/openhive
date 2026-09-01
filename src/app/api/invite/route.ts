@@ -192,18 +192,48 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // User doesn't exist — send invite email via Supabase Auth
-    const redirectTo = `${request.nextUrl.origin}/auth?workspace=${workspaceId}&email=${encodeURIComponent(email)}`
+    // User doesn't exist — send invite email via Supabase Auth.
+    //
+    // The emailed link must work on the RECIPIENT'S machine. This server's
+    // origin (http://127.0.0.1:<port>) only exists on the sender's computer,
+    // so prefer, in order:
+    //   1. NEXT_PUBLIC_APP_URL — a shared deployment URL (e.g. Vercel)
+    //   2. openhive:// deep link — opens the recipient's installed app
+    //      (allowlisted during setup, see provisioner.configureSiteUrl)
+    // and fall back to this server's origin if Supabase rejects the deep link.
+    const emailParams = `workspace=${workspaceId}&email=${encodeURIComponent(email)}`
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, '')
+    const primaryRedirectTo = appUrl
+      ? `${appUrl}/auth?${emailParams}`
+      : `openhive://join?${emailParams}`
+    const fallbackRedirectTo = `${request.nextUrl.origin}/auth?${emailParams}`
 
-    const { error: inviteError } =
-      await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-        redirectTo,
-        data: {
-          workspace_id: workspaceId,
-          workspace_name: workspaceName || 'OpenHive',
-          display_name: email.split('@')[0],
-        },
+    const inviteData = {
+      workspace_id: workspaceId,
+      workspace_name: workspaceName || 'OpenHive',
+      display_name: email.split('@')[0],
+    }
+
+    let { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+      redirectTo: primaryRedirectTo,
+      data: inviteData,
+    })
+
+    if (
+      inviteError &&
+      primaryRedirectTo !== fallbackRedirectTo &&
+      /redirect|allow/i.test(inviteError.message || '')
+    ) {
+      // Supabase project's redirect allowlist doesn't include the deep-link
+      // scheme yet — retry with this server's origin so the invite still goes
+      // out (the recipient can also paste the link into their app).
+      console.warn('[invite] Deep-link redirect rejected, retrying with server origin:', inviteError.message)
+      const retry = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+        redirectTo: fallbackRedirectTo,
+        data: inviteData,
       })
+      inviteError = retry.error
+    }
 
     if (inviteError) {
       // Handle already invited/registered case
