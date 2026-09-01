@@ -12,10 +12,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
-    "electron:dev": "electron .",
-    "electron:preview": "npm run build && cross-env OPENHIVE_MODE=prod electron .",
-    "electron:build": "npm run build && electron-builder"
+    "lint": "eslint"
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",
@@ -59,91 +56,5 @@
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
     "typescript": "^5"
-  },
-  "build": {
-    "appId": "app.openhive.desktop",
-    "productName": "OpenHive",
-
-    "protocols": [
-      {
-        "name": "OpenHive",
-        "schemes": ["openhive"]
-      }
-    ],
-
-    "directories": {
-      "output": "dist-electron",
-      "buildResources": "electron/build"
-    },
-
-    "files": [
-      "electron/**/*",
-      "package.json",
-      "!**/node_modules/**",
-      "!src/**",
-      "!.next/**",
-      "!dist-electron/**",
-      "!.git/**"
-    ],
-
-    "extraResources": [
-      {
-        "from": ".next/standalone",
-        "to": "server",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
-        "from": ".next/standalone/node_modules",
-        "to": "server/node_modules",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
-        "from": ".next/static",
-        "to": "server/.next/static",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
-        "from": "public",
-        "to": "server/public",
-        "filter": [
-          "**/*"
-        ]
-      }
-    ],
-
-    "win": {
-      "target": [
-        "nsis"
-      ]
-    },
-
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    },
-
-    "mac": {
-      "target": [
-        {
-          "target": "dmg",
-          "arch": ["x64", "arm64"]
-        }
-      ],
-      "category": "public.app-category.social-networking"
-    },
-
-    "linux": {
-      "target": [
-        "AppImage",
-        "deb"
-      ],
-      "category": "Network"
-    }
   }
 }
